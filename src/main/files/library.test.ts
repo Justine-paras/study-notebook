@@ -93,11 +93,17 @@ describe('library', () => {
     expect(await readdir(join(libraryDir, 'nb-parallel'))).toHaveLength(8)
   })
 
-  it('stores files with Windows-unsafe names under a safe name', async () => {
-    const src = await writeFixture(originals, 'what? notes*.md ', '# hi')
-    const stored = await copyIntoLibrary(libraryDir, 'nb-3', src)
-    expect(basename(stored.storedPath)).toBe('what notes.md')
-    expect(dirname(stored.storedPath)).toBe(join(libraryDir, 'nb-3'))
+  it('stores files with Windows-unsafe or overlong names under a safe name', async () => {
+    const cases: Array<[string, string]> = [[`${'n'.repeat(150)}.md`, `${'n'.repeat(117)}.md`]]
+    // Windows itself refuses to create a file named like this, so only other
+    // systems can hand one to the library.
+    if (process.platform !== 'win32') cases.push(['what? notes*.md ', 'what notes.md'])
+    for (const [name, expected] of cases) {
+      const src = await writeFixture(originals, name, '# hi')
+      const stored = await copyIntoLibrary(libraryDir, 'nb-3', src)
+      expect(basename(stored.storedPath)).toBe(expected)
+      expect(dirname(stored.storedPath)).toBe(join(libraryDir, 'nb-3'))
+    }
   })
 
   it('reports empty files with size 0', async () => {

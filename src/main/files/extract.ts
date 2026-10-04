@@ -98,7 +98,10 @@ export async function extractText(filePath: string, ext: SupportedExtension): Pr
   if (!(SUPPORTED_EXTENSIONS as readonly unknown[]).includes(ext)) throw unsupported(ext)
   try {
     // Checked up front so an empty download gets the same clear message whatever its type.
-    if ((await stat(filePath)).size === 0) throw new AppError('EXTRACT_FAILED', 'This file is empty.')
+    // Folders first: Windows reports their size as 0, which would read as "empty".
+    const info = await stat(filePath)
+    if (info.isDirectory()) throw new AppError('EXTRACT_FAILED', 'That is a folder, not a file.')
+    if (info.size === 0) throw new AppError('EXTRACT_FAILED', 'This file is empty.')
     switch (ext) {
       case 'pdf':
         return await extractPdf(filePath)
