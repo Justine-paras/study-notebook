@@ -11,6 +11,7 @@ describe('ROUTES', () => {
     expect(ROUTES.session('weak')).toBe('/session?part=weak')
     expect(ROUTES.review()).toBe('/review')
     expect(ROUTES.review('nb1')).toBe('/review?notebook=nb1')
+    expect(ROUTES.reviewTopic('t1')).toBe('/review?topic=t1')
     expect(ROUTES.quiz('q1')).toBe('/quiz/q1')
   })
 })

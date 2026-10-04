@@ -41,7 +41,7 @@ This builds an installer at `dist\Study-Notebook-Setup-0.1.0.exe`. Run it: it in
 3. Click **Find topics in syllabus**. The topics appear in course order, and exam dates from the syllabus become exams.
 4. Open a topic and work through its five steps: **Warm-up** (guess first), **Learn** (small parts, each with a quick check), **Explain it** (in your own words, with feedback on what's missing), **Practice** (mixed questions with a confidence rating), **Remember** (flashcards and a review schedule).
 5. Each day, open **Today** and press **Start today's session**. It mixes cards you're about to forget, your weak spots and the next topic before your nearest exam, and starts the Pomodoro.
-6. Before an exam, take a **mock exam** from the notebook page. **Insights** shows your weak topics, whether your confidence matches your accuracy, and what's due this week.
+6. Before an exam, take a **mock exam** from the notebook page. **Insights** shows your weak topics (with buttons to relearn one or review just its flashcards), whether your confidence matches your accuracy, and what's due this week.
 
 ## Where your data lives
 

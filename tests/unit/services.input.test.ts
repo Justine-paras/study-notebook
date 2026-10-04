@@ -9,7 +9,9 @@ import { AppError } from '@shared/errors'
 import { services } from '../../src/main/services'
 import { createTestContext, type TestContext } from './helpers/context'
 
-const JUNK: unknown[] = [undefined, null, 0, -1, 1.5, Number.NaN, '', 'x', {}, [], [1], { a: 1 }, true, { topicId: {} }, { kind: {} }, { title: {}, body: {} }]
+const JUNK: unknown[] = [
+  undefined, null, 0, -1, 1.5, Number.NaN, '', 'x', {}, [], [1], { a: 1 }, true, { topicId: {} }, { topicIds: [{}] }, { kind: {} }, { title: {}, body: {} }
+]
 // Desktop-only actions (dialogs, opening files) and the API check have nothing to validate.
 const SKIP = new Set<StudyApiMethod>(['pickFiles', 'openSource', 'openDataFolder', 'exportBackup', 'testApiKey'])
 

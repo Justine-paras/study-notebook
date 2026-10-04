@@ -66,7 +66,7 @@ Imports: inside the renderer use relative paths or the `@renderer/*` alias
    `ErrorNotice`, every AI call shows `AiWorking` while pending, every empty
    list shows `EmptyState`.
 5. Route helpers: `ROUTES` in `lib/routes.ts` (`ROUTES.topic(id, 'learn')` ->
-   `/topics/<id>?step=learn`, `ROUTES.review(notebookId)`, `ROUTES.session('weak')`).
+   `/topics/<id>?step=learn`, `ROUTES.review(notebookId)`, `ROUTES.reviewTopic(topicId)`, `ROUTES.session('weak')`).
    Read query strings with `useSearchParams` from `react-router`.
 
 ## CSS conventions
@@ -170,7 +170,7 @@ last argument of react-query options (`enabled`, `staleTime`,
 | `useQuizzes(notebookId, kind?)` | `Quiz[]` |
 | `useQuiz(id)` | `Quiz` |
 | `useQuizResult(id, { enabled: !!quiz?.submittedAt })` | `QuizResult` (submitted quizzes only) |
-| `useReviewQueue({ limit?, notebookId?, cardIds? })` | `ReviewCard[]` |
+| `useReviewQueue({ limit?, notebookId?, cardIds?, topicIds? })` | `ReviewCard[]` (`topicIds`: those topics' cards, due or not) |
 | `useCards(notebookId, topicId?)` | `Card[]` |
 | `useNotes(notebookId, topicId?)` | `Note[]` |
 | `useExams(notebookId?)` | `Exam[]` (all notebooks when omitted) |

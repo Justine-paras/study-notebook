@@ -10,6 +10,7 @@ import {
   findCard,
   findCards,
   insertCard,
+  listActiveCardsForTopics,
   listActiveTopicCards,
   listDueCards,
   listDueTimesBefore,
@@ -265,6 +266,20 @@ describe('cards and reviews', () => {
     expect(listDueCards(db, now, 'archived').map((c) => c.id)).toEqual(['archived'])
     expect(countDueCardsByNotebook(db, now).get('n')).toBe(2)
     expect(countLongTermCards(db, 21)).toBe(1)
+  })
+
+  it("lists topics' cards soonest due first, due or not, skipping suspended ones", () => {
+    insertTopic(db, topic('t2', 'n', 1))
+    insertTopic(db, topic('t3', 'archived', 0))
+    insertCard(db, card('future', 'n', 't', { due: '2026-12-01T00:00:00.000Z' }))
+    insertCard(db, card('late', 'n', 't', { due: '2026-09-01T00:00:00.000Z' }))
+    insertCard(db, card('suspended', 'n', 't', { due: '2026-09-01T00:00:00.000Z', suspended: true }))
+    insertCard(db, card('other', 'n', 't2', { due: '2026-10-01T00:00:00.000Z' }))
+    insertCard(db, card('loose', 'n', null, { due: '2026-09-01T00:00:00.000Z' }))
+    insertCard(db, card('shelved', 'archived', 't3', { due: '2026-11-01T00:00:00.000Z' }))
+    expect(listActiveCardsForTopics(db, ['t']).map((c) => c.id)).toEqual(['late', 'future'])
+    expect(listActiveCardsForTopics(db, ['t', 't2', 't3']).map((c) => c.id)).toEqual(['late', 'other', 'shelved', 'future'])
+    expect(listActiveCardsForTopics(db, [])).toEqual([])
   })
 
   it('stores review logs per notebook', () => {

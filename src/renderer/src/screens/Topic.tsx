@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useParams, useSearchParams } from 'react-router'
-import { BookOpen, RefreshCw } from 'lucide-react'
+import { BookOpen, Layers, RefreshCw } from 'lucide-react'
 import type { ID, PathStep } from '@shared/types'
 import { AiWorking } from '../components/AiWorking'
 import { ErrorNotice } from '../components/ErrorNotice'
@@ -168,6 +168,9 @@ function TopicView({ topicId }: { topicId: ID | undefined }) {
   }
 
   const meta = [current.unitLabel, lessonData ? `about ${formatMinutes(lessonData.content.estMinutes)}` : null].filter(Boolean).join(' · ')
+  // A weak topic's cards can be reviewed right away, due or not.
+  const reviewCards = current.progress.state === 'weak' && current.progress.cardCount > 0
+  const lessonMenu = !!lessonData && !generate.isPending
 
   let main: ReactNode
   if (lesson.isPending) {
@@ -240,13 +243,22 @@ function TopicView({ topicId }: { topicId: ID | undefined }) {
         title={current.title}
         description={meta || undefined}
         actions={
-          lessonData && !generate.isPending ? (
-            <Menu
-              label={`Lesson actions for ${current.title}`}
-              variant="subtle"
-              size="md"
-              items={[{ label: 'Write a new lesson', icon: <RefreshCw size={16} aria-hidden="true" />, onSelect: () => void regenerate() }]}
-            />
+          reviewCards || lessonMenu ? (
+            <>
+              {reviewCards && (
+                <Button to={ROUTES.reviewTopic(current.id)} variant="secondary" icon={<Layers size={16} aria-hidden="true" />}>
+                  Review cards
+                </Button>
+              )}
+              {lessonMenu && (
+                <Menu
+                  label={`Lesson actions for ${current.title}`}
+                  variant="subtle"
+                  size="md"
+                  items={[{ label: 'Write a new lesson', icon: <RefreshCw size={16} aria-hidden="true" />, onSelect: () => void regenerate() }]}
+                />
+              )}
+            </>
           ) : undefined
         }
       />

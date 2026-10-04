@@ -521,6 +521,26 @@ describe('reviews', () => {
     await services.deleteCard(ctx, c1.id)
     await expect(services.reviewCard(ctx, { cardId: c1.id, rating: 3, confidence: null, response: '' })).rejects.toMatchObject({ code: 'NOT_FOUND' })
   })
+
+  it("queues one topic's cards, due or not, and checks the topic ids", async () => {
+    const { notebook, topics } = await notebookWithTopics(['Deadlocks', 'Paging'])
+    const due = await services.createCard(ctx, { notebookId: notebook.id, topicId: topics[0].id, front: 'Due', back: 'B' })
+    const later = await services.createCard(ctx, { notebookId: notebook.id, topicId: topics[0].id, front: 'Later', back: 'B' })
+    await services.createCard(ctx, { notebookId: notebook.id, topicId: topics[1].id, front: 'Other topic', back: 'B' })
+    await services.reviewCard(ctx, { cardId: later.id, rating: 3, confidence: null, response: '' })
+
+    expect((await services.getReviewQueue(ctx, { topicIds: [topics[0].id] })).map((c) => c.id)).toEqual([due.id, later.id])
+    expect((await services.getReviewQueue(ctx, { topicIds: [topics[0].id, topics[0].id] })).map((c) => c.id)).toEqual([due.id, later.id])
+    expect((await services.getReviewQueue(ctx, { topicIds: [topics[0].id], limit: 1 })).map((c) => c.id)).toEqual([due.id])
+    expect(await services.getReviewQueue(ctx, { topicIds: [topics[0].id], cardIds: [later.id] })).toHaveLength(1)
+
+    for (const topicIds of [null, 'x', {}, [], [1], [topics[0].id, null]]) {
+      await expect(services.getReviewQueue(ctx, { topicIds: topicIds as never })).rejects.toMatchObject({ code: 'INVALID_INPUT' })
+    }
+    await expect(services.getReviewQueue(ctx, { topicIds: [topics[0].id], limit: 0 })).rejects.toMatchObject({ code: 'INVALID_INPUT' })
+    await expect(services.getReviewQueue(ctx, { topicIds: [topics[0].id, 'gone'] })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    await expect(services.getReviewQueue(ctx, { topicIds: [topics[0].id], notebookId: 'gone' })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+  })
 })
 
 describe('notes, exams and focus', () => {

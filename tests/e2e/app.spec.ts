@@ -517,3 +517,40 @@ test('shows Today, Session, Insights and Settings, and switches to dark', async 
   await expect(page.getByRole('heading', { name: 'Insights', level: 1 })).toBeVisible()
   await shot('insights-dark')
 })
+
+test("reviews a weak topic's flashcards from Insights", async () => {
+  // The step before ended in dark mode; this one is shot in light, like the others.
+  await page.getByRole('link', { name: 'Settings' }).click()
+  await page.getByRole('radiogroup', { name: 'Theme' }).getByRole('radio', { name: 'Light' }).click()
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
+  await dismissToasts()
+
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Insights' }).click()
+  const row = page.locator('.weak-topics__row', { has: page.getByRole('link', { name: /^Review cards for / }) }).first()
+  await expect(row).toBeVisible()
+  const title = (await row.locator('.weak-topics__title').textContent())!.trim()
+  await row.getByRole('link', { name: `Review cards for ${title}` }).click()
+
+  await expect(page).toHaveURL(/#\/review\?topic=[\w-]+$/)
+  const topicId = page.url().split('topic=')[1]!
+  await expect(page.getByRole('heading', { name: `Review: ${title}`, level: 1 })).toBeVisible()
+  await expect(page.getByText(/Card 1 of \d+/)).toBeVisible()
+  await expect(page.locator('.review-card__tags').getByText(title)).toBeVisible()
+  await shot('review-weak-topic')
+
+  // Grading goes through the normal review, even for a card that isn't due yet.
+  const before = Date.now()
+  await page.getByRole('button', { name: /^Sure/ }).click()
+  await expect(page.getByRole('region', { name: 'Answer' })).toBeVisible()
+  await expect(page.getByRole('button', { name: /^Good: .*, back in / })).toBeVisible()
+  await page.getByRole('group', { name: 'How did you do?' }).scrollIntoViewIfNeeded()
+  await shot('review-weak-topic-revealed')
+  await page.getByRole('button', { name: /^Good:/ }).click()
+  await expect(page.getByRole('region', { name: 'Answer' })).toBeHidden()
+  const cards = await invoke<{ topicId: string | null; lastReview: string | null }[]>('listCards', [notebookId, topicId])
+  expect(cards.filter((c) => c.lastReview !== null && Date.parse(c.lastReview) >= before - 1000)).toHaveLength(1)
+
+  await page.locator('.page-header').getByRole('link', { name: title }).click()
+  await expect(page.getByRole('heading', { name: title, level: 1 })).toBeVisible()
+  await shot('topic-after-weak-review')
+})

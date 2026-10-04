@@ -1,5 +1,5 @@
-import { ArrowDown, ArrowUp, Pencil, Trash2 } from 'lucide-react'
-import { Link } from 'react-router'
+import { ArrowDown, ArrowUp, Layers, Pencil, Trash2 } from 'lucide-react'
+import { Link, useNavigate } from 'react-router'
 import type { TopicWithProgress } from '@shared/types'
 import { MasteryBar, MasteryPill } from '../MasteryPill'
 import { Button, IconButton, Menu, type MenuEntry } from '../ui'
@@ -27,10 +27,17 @@ export interface TopicRowProps {
  * and the next thing to do. The Topic page picks the step to open on.
  */
 export function TopicRow({ topic, status, showUnit, reordering, canMoveUp, canMoveDown, onMove, onEdit, onDelete }: TopicRowProps) {
-  const { state, mastery } = topic.progress
+  const navigate = useNavigate()
+  const { state, mastery, cardCount } = topic.progress
   const action = topicAction(state)
   const href = ROUTES.topic(topic.id)
+  // A weak topic's cards can be reviewed right away, due or not, next to relearning it.
+  const reviewEntries: MenuEntry[] =
+    state === 'weak' && cardCount > 0
+      ? [{ label: 'Review cards', icon: <Layers size={16} aria-hidden="true" />, onSelect: () => navigate(ROUTES.reviewTopic(topic.id)) }, 'separator']
+      : []
   const items: MenuEntry[] = [
+    ...reviewEntries,
     { label: 'Edit topic', icon: <Pencil size={16} aria-hidden="true" />, onSelect: onEdit },
     { label: 'Move up', icon: <ArrowUp size={16} aria-hidden="true" />, onSelect: () => onMove('up'), disabled: !canMoveUp },
     { label: 'Move down', icon: <ArrowDown size={16} aria-hidden="true" />, onSelect: () => onMove('down'), disabled: !canMoveDown },

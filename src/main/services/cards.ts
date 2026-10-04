@@ -1,6 +1,14 @@
 // Flashcards and spaced-repetition reviews.
 
-import { adjustRatingForConfidence, applyRating, interleaveByNotebook, isRecalledRating, newCardSchedule, previewRatings } from '@shared/learning'
+import {
+  adjustRatingForConfidence,
+  applyRating,
+  interleaveByNotebook,
+  isRecalledRating,
+  newCardSchedule,
+  previewRatings,
+  retrievability
+} from '@shared/learning'
 import type { Card, CardOrigin, CardSchedule, ID, Notebook, Rating, ReviewCard, ReviewLog } from '@shared/types'
 import type { ReviewInput } from '@shared/api'
 import type { AppContext } from '../context'
@@ -10,6 +18,7 @@ import {
   findCard,
   findCards,
   insertCard,
+  listActiveCardsForTopics,
   listCardRows,
   listCardsForTopic,
   listDueCards,
@@ -28,6 +37,7 @@ import {
   optionalId,
   optionalText,
   requireConfidence,
+  requireIdList,
   requireNotebook,
   requireText,
   scheduleOf
@@ -114,9 +124,36 @@ function requireRating(value: unknown): Rating {
   throw invalid('Rating must be 1 (Again), 2 (Hard), 3 (Good) or 4 (Easy).')
 }
 
+/** Topic ids for a focused review: at least one, and every one must exist. */
+function requireReviewTopics(ctx: AppContext, value: unknown): ID[] {
+  const ids = requireIdList(value, 'Topics')
+  if (ids.length === 0) throw invalid('Choose at least one topic to review.')
+  const known = findTopicTitles(ctx.db, ids)
+  if (ids.some((id) => !known.has(id))) throw notFound('Topic')
+  return ids
+}
+
+/**
+ * Order for reviewing a weak topic's cards on demand: due cards first, in the
+ * order given (most overdue first), then cards not due yet with the lowest
+ * retrievability first, since those are the closest to being forgotten and
+ * gain the most from an early review. Ties keep the order given.
+ */
+function orderTopicReview<T extends Card>(cards: readonly T[], now: Date): T[] {
+  // The same lexical comparison as listDueCards, so "due" means the same here as in Today's counts.
+  const nowIso = now.toISOString()
+  const due = cards.filter((c) => c.due <= nowIso)
+  const ahead = cards
+    .filter((c) => c.due > nowIso)
+    .map((card) => ({ card, recall: retrievability(card, now) }))
+    .sort((a, b) => a.recall - b.recall)
+    .map((entry) => entry.card)
+  return [...due, ...ahead]
+}
+
 export async function getReviewQueue(
   ctx: AppContext,
-  options: { limit?: number; notebookId?: ID; cardIds?: ID[] } = {}
+  options: { limit?: number; notebookId?: ID; cardIds?: ID[]; topicIds?: ID[] } = {}
 ): Promise<ReviewCard[]> {
   const opts = options ?? {}
   const settings = readStoredSettings(ctx)
@@ -132,8 +169,17 @@ export async function getReviewQueue(
     if (opts.notebookId !== undefined) requireNotebook(ctx, opts.notebookId)
     const limit = opts.limit ?? settings.maxReviewsPerDay
     if (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1) throw invalid('Limit must be a whole number above 0.')
-    // listDueCards is ordered most overdue first; cap before interleaving so the cap keeps the most urgent cards.
-    cards = interleaveByNotebook(listDueCards(ctx.db, now.toISOString(), opts.notebookId).slice(0, limit))
+    if (opts.topicIds !== undefined) {
+      // A weak topic's cards on demand, due or not. Grading one early goes through reviewCard
+      // like any review, so FSRS schedules from the real time since the last review.
+      const topicIds = requireReviewTopics(ctx, opts.topicIds)
+      const { notebookId } = opts
+      const topicCards = listActiveCardsForTopics(ctx.db, topicIds).filter((c) => notebookId === undefined || c.notebookId === notebookId)
+      cards = orderTopicReview(topicCards, now).slice(0, limit)
+    } else {
+      // listDueCards is ordered most overdue first; cap before interleaving so the cap keeps the most urgent cards.
+      cards = interleaveByNotebook(listDueCards(ctx.db, now.toISOString(), opts.notebookId).slice(0, limit))
+    }
   }
   return toReviewCards(ctx, cards, now, settings.desiredRetention)
 }

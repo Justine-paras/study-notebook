@@ -11,5 +11,7 @@ export const ROUTES = {
   topic: (topicId: ID, step?: PathStep) => (step ? `/topics/${topicId}?step=${step}` : `/topics/${topicId}`),
   session: (part?: 'review' | 'weak' | 'learn') => (part ? `/session?part=${part}` : '/session'),
   review: (notebookId?: ID) => (notebookId ? `/review?notebook=${notebookId}` : '/review'),
+  /** One topic's cards, due or not (reviewing a weak topic on demand). */
+  reviewTopic: (topicId: ID) => `/review?topic=${topicId}`,
   quiz: (quizId: ID) => `/quiz/${quizId}`
 } as const

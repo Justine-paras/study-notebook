@@ -117,6 +117,21 @@ export function listActiveTopicCards(db: DatabaseSync, scope: NotebookScope): Ca
   return rows.map(toCard)
 }
 
+/**
+ * Non-suspended cards of these topics, soonest due first (most overdue first). Archived
+ * notebooks are included: the topics were asked for by id.
+ */
+export function listActiveCardsForTopics(db: DatabaseSync, topicIds: ID[]): Card[] {
+  if (topicIds.length === 0) return []
+  return prepare(
+    db,
+    `SELECT * FROM cards WHERE topic_id IN (SELECT value FROM json_each(?)) AND suspended = 0
+     ORDER BY due ASC, created_at ASC, rowid ASC`
+  )
+    .all(JSON.stringify(topicIds))
+    .map(toCard)
+}
+
 /** Due times of the non-suspended cards in non-archived notebooks that fall due before `beforeIso` (overdue included), for the forecast. */
 export function listDueTimesBefore(db: DatabaseSync, beforeIso: string): { due: string }[] {
   return prepare(

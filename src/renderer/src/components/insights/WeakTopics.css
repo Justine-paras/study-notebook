@@ -34,6 +34,20 @@
   flex: 1 1 160px;
 }
 
+.weak-topics__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  /* Wrapped onto a line of their own (narrow windows), the buttons stay on the right. */
+  margin-left: auto;
+}
+
+/* When some rows offer a card review, every row keeps room for both buttons, so the mastery bars line up and rows wrap alike. */
+.weak-topics__list--reviews .weak-topics__actions {
+  min-width: 240px;
+}
+
 .weak-topics__empty {
   border-top: 1px solid var(--line-2);
 }

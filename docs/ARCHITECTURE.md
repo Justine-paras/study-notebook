@@ -337,7 +337,7 @@ Touch targets at least 40px tall. Real `<button>`, `<a>`, `<input>`,
 | `/notebooks/:notebookId` | Notebook: topics, sources, exams, notes, cards | screens-B |
 | `/topics/:topicId` | Topic learning path (`?step=warmup|learn|explain|practice|remember`) | screens-C |
 | `/session` | Today's session: mixed review, then weak spots, then learn (`?part=review|weak|learn`) | screens-C |
-| `/review` | Free review of due cards (`?notebook=<id>` optional) | screens-C |
+| `/review` | Free review of due cards (`?notebook=<id>` optional), or one topic's cards due or not (`?topic=<id>`) | screens-C |
 | `/quiz/:quizId` | Quiz / mock exam runner and results | screens-C |
 
 ### Renderer ownership
@@ -459,6 +459,11 @@ plan's weak topics and runs it inline. Part 3 learn: links to the plan's
 learn topic. Each part can be skipped; "End session" returns to Today.
 
 **Review** (`/review`): same card flow as Session part 1 without parts.
+With `?topic=<id>` ("Review: <topic>", from a weak topic's "Review cards" in
+Insights, on the topic page and in the notebook's topic menu) it reviews that
+topic's cards whether due or not: due cards first, then the ones closest to
+being forgotten (lowest retrievability). Early grades go through `reviewCard`
+like any other, so FSRS schedules from the real time since the last review.
 
 **Quiz** (`/quiz/:id`): practice/weak spots: all questions on one lined
 sheet, each with type label, topic, options or input, confidence chips,
@@ -470,10 +475,11 @@ grid (answered / flagged / current), flag for review, autosave each answer
 results by topic with mastery impact and a "Review mistakes" list.
 
 **Insights** (`/insights`): weak topics across subjects (lowest first, why,
-mastery bar, Relearn -> topic), calibration (accuracy when sure / unsure /
-guessing, with one sentence of interpretation), reviews due next 7 days (bar
-chart), mistake log (prompt, your answer, correct answer, date), study time
-by day (last 14 days) and by subject, streak.
+mastery bar, Relearn -> topic, Review cards -> `/review?topic=` when the topic
+has cards), calibration (accuracy when sure / unsure / guessing, with one
+sentence of interpretation), reviews due next 7 days (bar chart), mistake log
+(prompt, your answer, correct answer, date), study time by day (last 14 days)
+and by subject, streak.
 
 **Settings**: API key (password field, save, test connection, remove;
 explain it is stored encrypted on this computer and costs a little per
