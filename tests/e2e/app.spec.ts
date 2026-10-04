@@ -327,6 +327,8 @@ test('reviews due flashcards', async () => {
   await expect(page.getByRole('region', { name: 'Answer' })).toBeVisible()
   await shot('review-revealed')
   await page.getByRole('button', { name: /^Again:/ }).click()
+  // Grading is a round trip; keys pressed before the next card shows are ignored.
+  await expect(page.getByRole('region', { name: 'Answer' })).toBeHidden()
 
   // The rest by keyboard: 1 = sure, then 3 = Good.
   for (let i = 0; i < 60; i += 1) {
