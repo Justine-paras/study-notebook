@@ -1,0 +1,969 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Study Notebook</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&amp;family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&amp;family=Instrument+Serif&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#2F5D8A}a:hover{color:#1F4266}
+.paper{background-color:#F7F4EC;background-image:radial-gradient(#D8D1C1 1px,transparent 1.2px);background-size:22px 22px}
+.lined{background-color:#FFFDF8;background-image:repeating-linear-gradient(to bottom,transparent 0,transparent 31px,#E8E2D5 31px,#E8E2D5 32px)}
+button,textarea,input{font-family:inherit}
+button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid #2F5D8A;outline-offset:2px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+</style>
+</helmet>
+
+<div class="paper" style="min-height: 1100px; font-family: 'DM Sans', system-ui, sans-serif; color: #22201C; font-size: 15px; line-height: 1.5; display: flex; flex-direction: column">
+
+  <!-- Top bar -->
+  <header style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; padding: 12px 28px; background: rgba(255,253,248,0.94); border-bottom: 1px solid #E3DED2">
+    <div style="display: flex; align-items: center; gap: 10px">
+      <svg width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="#22201C" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="3.5" width="17" height="21" rx="2.5"></rect><path d="M6 3.5v21"></path><path d="M3.5 8h4M3.5 14h4M3.5 20h4"></path><path d="M11 9h8M11 13h6"></path></svg>
+      <span style="font-family: 'Instrument Serif', serif; font-size: 25px; line-height: 1">Study Notebook</span>
+    </div>
+    <nav aria-label="Main" style="display: flex; gap: 4px; padding: 4px; background: #F3EFE6; border-radius: 12px">
+      <sc-for list="{{navItems}}" as="nv" hint-placeholder-count="3">
+        <button onClick="{{nv.pick}}" aria-current="{{nv.current}}" style="{{nv.style}}">{{nv.label}}</button>
+      </sc-for>
+    </nav>
+    <div style="flex: 1 1 40px"></div>
+    <div style="display: flex; align-items: center; gap: 8px; font-size: 14px; color: #4E4A43">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#A4521E" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 1.8c.6 2.6 3.9 4.2 3.9 7.8A3.9 3.9 0 0 1 5.1 9.6c0-1.4.6-2.4 1.5-3.2.2 1.2.8 2 1.6 2.3C8 6.4 8.1 4 9 1.8z"></path></svg>
+      <span><strong style="color: #22201C">12-day</strong> streak</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 10px; padding: 5px 6px 5px 14px; border: 1px solid #E3DED2; border-radius: 12px; background: #FFFDF8">
+      <div style="display: flex; flex-direction: column; line-height: 1.15">
+        <span style="font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: #6A655C">{{pomoLabel}}</span>
+        <span style="font-variant-numeric: tabular-nums; font-size: 21px; font-weight: 600">{{pomoTime}}</span>
+      </div>
+      <div style="width: 64px; height: 6px; border-radius: 3px; background: #EEE9DE; overflow: hidden"><div style="height: 6px; width: {{pomoPct}}%; background: {{pomoColor}}"></div></div>
+      <button onClick="{{pomoToggle}}" aria-label="{{pomoBtnLabel}}" style="width: 44px; height: 44px; border-radius: 10px; border: none; background: #22201C; display: flex; align-items: center; justify-content: center; cursor: pointer">
+        <sc-if value="{{pomoRunning}}" hint-placeholder-val="{{ false }}"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#FFFDF8" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 3v10M11 3v10"></path></svg></sc-if>
+        <sc-if value="{{pomoPaused}}" hint-placeholder-val="{{ true }}"><svg width="16" height="16" viewBox="0 0 16 16" fill="#FFFDF8" aria-hidden="true"><path d="M4.5 2.8v10.4L13 8z"></path></svg></sc-if>
+      </button>
+      <button onClick="{{pomoReset}}" aria-label="Reset timer" style="width: 44px; height: 44px; border-radius: 10px; border: 1px solid #E3DED2; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#22201C" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 8a5.5 5.5 0 1 0 1.7-4"></path><path d="M2.5 2.5v3h3"></path></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ===================== TODAY ===================== -->
+  <sc-if value="{{isToday}}" hint-placeholder-val="{{ true }}">
+    <main style="width: 100%; max-width: 1240px; margin: 0 auto; padding: 36px 28px 64px; box-sizing: border-box; display: flex; flex-direction: column; gap: 28px">
+      <div>
+        <div style="font-family: 'Caveat', cursive; font-size: 26px; color: #A4521E; line-height: 1">Saturday, October 3</div>
+        <h1 style="margin: 4px 0 0; font-family: 'Instrument Serif', serif; font-weight: 400; font-size: 50px; line-height: 1.05">Good afternoon, Justine</h1>
+        <p style="margin: 8px 0 0; color: #6A655C; font-size: 16px">Your plan is built from what you're about to forget, what you keep missing, and what's next on the syllabus.</p>
+      </div>
+
+      <div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start">
+        <!-- Plan -->
+        <section class="lined" style="flex: 999 1 520px; min-width: 0; position: relative; border: 1px solid #E3DED2; border-radius: 6px 18px 18px 6px; padding: 28px 32px 30px 76px; box-shadow: 0 14px 30px -22px rgba(34,32,28,0.45); display: flex; flex-direction: column; gap: 18px">
+          <div style="position: absolute; left: 52px; top: 0; bottom: 0; width: 1.5px; background: #E7B3A6"></div>
+          <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 10px">
+            <h2 style="margin: 0; font-family: 'Instrument Serif', serif; font-weight: 400; font-size: 34px">Today's plan</h2>
+            <span style="font-size: 14px; color: #6A655C">about <strong style="color: #22201C">45 min</strong> · 2 Pomodoros</span>
+          </div>
+          <sc-for list="{{planBlocks}}" as="pb" hint-placeholder-count="3">
+            <div style="display: flex; gap: 16px; align-items: flex-start; padding: 14px 16px; background: #FFFDF8; border: 1px solid #E3DED2; border-radius: 12px">
+              <span style="width: 34px; height: 34px; flex: none; border-radius: 50%; background: {{pb.bg}}; color: {{pb.fg}}; display: flex; align-items: center; justify-content: center; font-weight: 700">{{pb.n}}</span>
+              <div style="flex: 1; min-width: 0">
+                <div style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px">
+                  <span style="font-weight: 700; font-size: 16px">{{pb.title}}</span>
+                  <span style="font-size: 13px; color: #6A655C">{{pb.time}}</span>
+                </div>
+                <div style="font-size: 14px; color: #4E4A43">{{pb.detail}}</div>
+                <div style="font-family: 'Caveat', cursive; font-size: 19px; color: #A4521E; line-height: 1.2; margin-top: 2px">{{pb.why}}</div>
+              </div>
+            </div>
+          </sc-for>
+          <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center">
+            <button onClick="{{startSession}}" style="height: 50px; padding: 0 26px; border-radius: 12px; border: none; background: #22201C; color: #FFFDF8; font-weight: 700; font-size: 16px; cursor: pointer; display: flex; align-items: center; gap: 10px">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="#FFFDF8" aria-hidden="true"><path d="M4.5 2.8v10.4L13 8z"></path></svg>
+              Start today's session
+            </button>
+            <span style="font-size: 13px; color: #6A655C">Starts the Pomodoro and mixes subjects together.</span>
+          </div>
+        </section>
+
+        <!-- Exams -->
+        <aside style="flex: 1 1 300px; display: flex; flex-direction: column; gap: 16px">
+          <section style="background: #FFFDF8; border: 1px solid #E3DED2; border-radius: 16px; padding: 20px 22px; display: flex; flex-direction: column; gap: 14px">
+            <h2 style="margin: 0; font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: #6A655C">Coming up</h2>
+            <sc-for list="{{exams}}" as="ex" hint-placeholder-count="2">
+              <div style="display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid #EEE9DE">
+                <div style="display: flex; justify-content: space-between; gap: 10px; align-items: baseline">
+                  <span style="font-weight: 700">{{ex.name}}</span>
+                  <span style="font-size: 13px; font-weight: 700; color: {{ex.color}}">in {{ex.days}} days</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 10px">
+                  <div style="flex: 1; height: 8px; border-radius: 4px; background: #EEE9DE; overflow: hidden"><div style="height: 8px; width: {{ex.ready}}%; background: {{ex.color}}"></div></div>
+                  <span style="font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums">{{ex.ready}}% ready</span>
+                </div>
+                <span style="font-size: 13px; color: #6A655C">{{ex.note}}</span>
+              </div>
+            </sc-for>
+          </section>
+          <section style="background: #FFFDF8; border: 1px solid #E3DED2; border-radius: 16px; padding: 20px 22px; display: flex; flex-direction: column; gap: 10px">
+            <h2 style="margin: 0; font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: #6A655C">Memory check</h2>
+            <div style="display: flex; gap: 18px; flex-wrap: wrap">
+              <div><div style="font-size: 28px; font-weight: 700">87%</div><div style="font-size: 13px; color: #6A655C">recalled in reviews this week</div></div>
+              <div><div style="font-size: 28px; font-weight: 700">412</div><div style="font-size: 13px; color: #6A655C">cards in long-term memory</div></div>
+            </div>
+          </section>
+        </aside>
+      </div>
+
+      <section style="display: flex; flex-direction: column; gap: 14px">
+        <h2 style="margin: 0; font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: #6A655C">Notebooks</h2>
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 20px">
+          <sc-for list="{{subjects}}" as="s" hint-placeholder-count="6">
+            <button onClick="{{s.open}}" aria-label="Open {{s.name}}" style="position: relative; height: 200px; border: none; border-radius: 6px 14px 14px 6px; background: {{s.color}}; cursor: pointer; padding: 0; text-align: left; box-shadow: 0 10px 22px -14px rgba(34,32,28,0.55); overflow: hidden">
+              <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 16px; background: rgba(0,0,0,0.22)"></div>
+              <div style="position: absolute; right: 22px; top: 0; bottom: 0; width: 6px; background: rgba(0,0,0,0.28)"></div>
+              <div style="position: absolute; left: 32px; right: 40px; top: 24px; padding: 10px 12px; background: #FFFDF8; border-radius: 4px">
+                <div style="font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #6A655C; font-weight: 600">{{s.code}}</div>
+                <div style="font-family: 'Instrument Serif', serif; font-size: 20px; line-height: 1.1; color: #22201C; margin-top: 2px">{{s.name}}</div>
+              </div>
+              <div style="position: absolute; left: 32px; right: 40px; bottom: 16px; color: #FFFFFF; display: flex; flex-direction: column; gap: 6px">
+                <div style="display: flex; justify-content: space-between; font-size: 12px; font-weight: 600"><span>Mastery</span><span>{{s.mastery}}%</span></div>
+                <div style="height: 6px; border-radius: 3px; background: rgba(255,255,255,0.3); overflow: hidden"><div style="height: 6px; width: {{s.mastery}}%; background: #FFFFFF"></div></div>
+              </div>
+            </button>
+          </sc-for>
+        </div>
+      </section>
+    </main>
+  </sc-if>
+
+  <!-- ===================== SESSION ===================== -->
+  <sc-if value="{{isSession}}" hint-placeholder-val="{{ false }}">
+    <main style="width: 100%; max-width: 820px; margin: 0 auto; padding: 32px 28px 64px; box-sizing: border-box; display: flex; flex-direction: column; gap: 20px">
+      <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px">
+        <button onClick="{{goToday}}" style="display: flex; align-items: center; gap: 6px; height: 40px; padding: 0 4px; border: none; background: none; color: #6A655C; font-size: 14px; font-weight: 500; cursor: pointer">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#6A655C" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3L5 8l5 5"></path></svg>
+          End session
+        </button>
+        <span style="font-size: 14px; color: #6A655C">Part 1 of 3 · Mixed review</span>
+      </div>
+      <div style="height: 8px; border-radius: 4px; background: #E8E2D5; overflow: hidden"><div style="height: 8px; width: {{sPct}}%; background: #22201C"></div></div>
+
+      <sc-if value="{{sActive}}" hint-placeholder-val="{{ true }}">
+        <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap">
+          <span style="font-size: 14px; font-weight: 600">Card {{sNum}} of {{sTotal}}</span>
+          <span style="padding: 4px 12px; border-radius: 999px; background: {{sItem.tint}}; color: {{sItem.ink}}; font-size: 13px; font-weight: 700">{{sItem.subject}} · {{sItem.topic}}</span>
+        </div>
+        <article class="lined" style="position: relative; border: 1px solid #E3DED2; border-radius: 6px 18px 18px 6px; padding: 34px 40px 34px 80px; box-shadow: 0 18px 36px -24px rgba(34,32,28,0.55); display: flex; flex-direction: column; gap: 18px">
+          <div style="position: absolute; left: 56px; top: 0; bottom: 0; width: 1.5px; background: #E7B3A6"></div>
+          <div style="font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: #6A655C; font-weight: 700">Recall from memory</div>
+          <div style="font-family: 'Instrument Serif', serif; font-size: 34px; line-height: 1.2">{{sItem.q}}</div>
+          <label style="display: flex; flex-direction: column; gap: 6px">
+            <span style="font-size: 13px; color: #6A655C">Write or say your answer first. Trying to recall is what makes it stick.</span>
+            <textarea value="{{sAnswer}}" onChange="{{sOnAnswer}}" rows="3" placeholder="Your answer" style="resize: vertical; padding: 12px 14px; border-radius: 10px; border: 1.5px solid #CFC7B6; background: #FFFDF8; font-size: 16px; color: #22201C; line-height: 1.5"></textarea>
+          </label>
+
+          <sc-if value="{{sAsking}}" hint-placeholder-val="{{ true }}">
+            <div style="display: flex; flex-direction: column; gap: 8px">
+              <span style="font-size: 14px; font-weight: 600">How sure are you?</span>
+              <div style="display: flex; flex-wrap: wrap; gap: 8px">
+                <sc-for list="{{confOpts}}" as="co" hint-placeholder-count="3">
+                  <button onClick="{{co.pick}}" style="height: 46px; padding: 0 20px; border-radius: 10px; border: 1.5px solid #22201C; background: #FFFDF8; color: #22201C; font-weight: 600; font-size: 15px; cursor: pointer">{{co.label}}</button>
+                </sc-for>
+              </div>
+              <span style="font-size: 12px; color: #6A655C">Picking one shows the answer. Your confidence helps the app spot things you think you know but don't.</span>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{sRevealed}}" hint-placeholder-val="{{ false }}">
+            <div style="padding: 16px 18px; border-radius: 12px; background: #FFFDF8; border: 1.5px solid #22201C; display: flex; flex-direction: column; gap: 6px">
+              <span style="font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: #6A655C; font-weight: 700">Answer · you said "{{sConf}}"</span>
+              <span style="font-size: 17px; line-height: 1.55">{{sItem.a}}</span>
+              <span style="font-size: 13px; color: #6A655C">Source: {{sItem.src}}</span>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 8px">
+              <span style="font-size: 14px; font-weight: 600">How did you do?</span>
+              <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px">
+                <sc-for list="{{grades}}" as="g" hint-placeholder-count="4">
+                  <button onClick="{{g.pick}}" style="height: 56px; border-radius: 10px; border: 1.5px solid {{g.border}}; background: #FFFDF8; color: #22201C; font-weight: 700; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.2">
+                    <span>{{g.label}}</span>
+                    <span style="font-size: 11px; color: #6A655C; font-weight: 500">{{g.next}}</span>
+                  </button>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+        </article>
+      </sc-if>
+
+      <sc-if value="{{sDone}}" hint-placeholder-val="{{ false }}">
+        <article class="lined" style="position: relative; border: 1px solid #E3DED2; border-radius: 6px 18px 18px 6px; padding: 34px 40px 34px 80px; display: flex; flex-direction: column; gap: 16px">
+          <div style="position: absolute; left: 56px; top: 0; bottom: 0; width: 1.5px; background: #E7B3A6"></div>
+          <div style="font-family: 'Caveat', cursive; font-size: 26px; color: #A4521E">part 1 done!</div>
+          <h2 style="margin: 0; font-family: 'Instrument Serif', serif; font-weight: 400; font-size: 38px">Review finished</h2>
+          <div style="display: flex; flex-wrap: wrap; gap: 14px">
+            <div style="flex: 1 1 140px; padding: 14px 16px; background: #FFFDF8; border: 1px solid #E3DED2; border-radius: 12px"><div style="font-size: 28px; font-weight: 700">{{sRecalled}} / {{sTotal}}</div><div style="font-size: 13px; color: #6A655C">recalled</div></div>
+            <div style="flex: 1 1 140px; padding: 14px 16px; background: #FFFDF8; border: 1px solid #E3DED2; border-radius: 12px"><div style="font-size: 28px; font-weight: 700">{{sOverconfident}}</div><div style="font-size: 13px; color: #6A655C">"sure" but wrong</div></div>
+            <div style="flex: 1 1 140px; padding: 14px 16px; background: #FFFDF8; border: 1px solid #E3DED2; border-radius: 12px"><div style="font-size: 28px; font-weight: 700">{{sMissed}}</div><div style="font-size: 13px; color: #6A655C">coming back later today</div></div>
+          </div>
+          <p style="margin: 0; color: #4E4A43">Missed cards return in a few minutes, then tomorrow. Topics you were sure about but got wrong are flagged in Insights.</p>
+          <div style="display: flex; flex-wrap: wrap; gap: 10px">
+            <button onClick="{{openTopic}}" style="height: 48px; padding: 0 22px; border-radius: 10px; border: none; background: #22201C; color: #FFFDF8; font-weight: 700; cursor: pointer">Continue to part 2: fix weak spots</button>
+            <button onClick="{{goToday}}" style="height: 48px; padding: 0 18px; border-radius: 10px; border: 1px solid #22201C; background: transparent; color: #22201C; font-weight: 600; cursor: pointer">Take a break</button>
+          </div>
+        </article>
+      </sc-if>
+    </main>
+  </sc-if>
+
+  <!-- ===================== NOTEBOOK ===================== -->
+  <sc-if value="{{isNotebook}}" hint-placeholder-val="{{ false }}">
+    <main style="width: 100%; max-width: 1280px; margin: 0 auto; padding: 28px 28px 64px; box-sizing: border-box; display: flex; flex-direction: column; gap: 22px">
+      <div style="position: relative; border-radius: 6px 18px 18px 6px; background: {{subj.color}}; color: #FFFFFF; padding: 26px 30px 26px 46px; display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-end; justify-content: space-between; overflow: hidden">
+        <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 18px; background: rgba(0,0,0,0.22)"></div>
+        <div>
+          <div style="font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 700; opacity: 0.9">{{subj.code}}</div>
+          <h1 style="margin: 2px 0 0; font-family: 'Instrument Serif', serif; font-weight: 400; font-size: 44px; line-height: 1.05">{{subj.name}}</h1>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center">
+          <div style="padding: 10px 16px; border-radius: 12px; background: rgba(255,255,255,0.16)">
+            <div style="font-size: 12px; opacity: 0.9">{{subj.examName}}</div>
+            <div style="font-weight: 700">{{subj.examWhen}} · {{subj.mastery}}% ready</div>
+          </div>
+          <button style="height: 46px; padding: 0 18px; border-radius: 10px; border: none; background: #FFFDF8; color: #22201C; font-weight: 700; cursor: pointer">Start mock exam</button>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start">
+        <section style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 12px">
+          <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 8px">
+            <h2 style="margin: 0; font-family: 'Instrument Serif', serif; font-weight: 400; font-size: 30px">Topics</h2>
+            <span style="font-size: 13px; color: #6A655C">Built from your syllabus, in course order</span>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 12px">
+            <sc-for list="{{legend}}" as="lg" hint-placeholder-count="5">
+              <span style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #4E4A43"><span style="width: 10px; height: 10px; border-radius: 3px; background: {{lg.color}}"></span>{{lg.label}}</span>
+            </sc-for>
+          </div>
+          <sc-if value="{{hasTopics}}" hint-placeholder-val="{{ true }}">
+            <div style="background: #FFFDF8; border: 1px solid #E3DED2; border-radius: 16px; overflow: hidden">
+              <sc-for list="{{topics}}" as="tp" hint-placeholder-count="9">
+                <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 14px; padding: 14px 20px; border-bottom: 1px solid #EEE9DE">
+                  <span style="width: 64px; font-size: 12px; color: #6A655C; font-weight: 600">{{tp.week}}</span>
+                  <div style="flex: 1 1 200px; min-width: 0">
+                    <div style="font-weight: 600; font-size: 15px">{{tp.name}}</div>
+                    <div style="font-size: 12px; color: #6A655C">{{tp.next}}</div>
+                  </div>
+                  <span style="padding: 3px 10px; border-radius: 999px; background: {{tp.bg}}; color: {{tp.fg}}; font-size: 12px; font-weight: 700">{{tp.state}}</span>
+                  <div style="width: 110px; height: 8px; border-radius: 4px; background: #EEE9DE; overflow: hidden"><div style="height: 8px; width: {{tp.pct}}%; background: {{tp.fg}}"></div></div>
+                  <button onClick="{{tp.open}}" style="{{tp.btnStyle}}">{{tp.action}}</button>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+          <sc-if value="{{noTopics}}" hint-placeholder-val="{{ false }}">
+            <div style="background: #FFFDF8; border: 1px solid #E3DED2; border-radius: 16px; padding: 40px 28px; text-align: center; color: #6A655C">Topics appear here once the syllabus is read. This notebook has {{fileCount}} files waiting.</div>
+          </sc-if>
+        </section>
+
+        <aside style="flex: 1 1 300px; display: flex; flex-direction: column; gap: 16px">
+          <section style="background: #FFFDF8; border: 1px solid #E3DED2; border-radius: 16px; padding: 18px 20px; display: flex; flex-direction: column; gap: 10px">
+            <div style="display: flex; justify-content: space-between; align-items: center">
+              <h2 style="margin: 0; font-size: 16px">Sources</h2>
+              <button style="height: 36px; padding: 0 12px; border-radius: 9px; border: 1px solid #22201C; background: transparent; color: #22201C; font-weight: 600; font-size: 13px; cursor: pointer">Upload</button>
+            </div>
+            <div style="border: 1.5px dashed #CFC7B6; border-radius: 10px; padding: 12px; text-align: center; font-size: 13px; color: #6A655C">Drop PDFs, slides, docs, quizzes or exams</div>
+            <sc-for list="{{files}}" as="fl" hint-placeholder-count="5">
+              <div style="display: flex; align-items: center; gap: 10px; padding: 6px 0">
+                <span style="width: 40px; height: 32px; border-radius: 6px; background: {{fl.badgeBg}}; color: {{fl.badgeFg}}; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700">{{fl.ext}}</span>
+                <div style="min-width: 0; flex: 1">
+                  <div style="font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{{fl.name}}</div>
+                  <div style="font-size: 12px; color: #6A655C">{{fl.kind}}</div>
+                </div>
+              </div>
+            </sc-for>
+          </section>
+          <section style="background: #FFFDF8; border: 1px solid #E3DED2; border-radius: 16px; padding: 18px 20px; display: flex; flex-direction: column; gap: 8px">
+            <h2 style="margin: 0; font-size: 16px">Past attempts</h2>
+            <span style="font-size: 14px; color: #4E4A43">Mock exam 2 · <strong>31/40</strong> · Sep 28</span>
+            <span style="font-size: 14px; color: #4E4A43">Mock exam 1 · <strong>24/40</strong> · Sep 20</span>
+          </section>
+        </aside>
+      </div>
+    </main>
+  </sc-if>
+
+  <!-- ===================== TOPIC ===================== -->
+  <sc-if value="{{isTopic}}" hint-placeholder-val="{{ false }}">
+    <main style="width: 100%; max-width: 1280px; margin: 0 auto; padding: 24px 28px 64px; box-sizing: border-box; display: flex; flex-direction: column; gap: 20px">
+      <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px">
+        <button onClick="{{openDsa}}" style="display: flex; align-items: center; gap: 6px; height: 40px; padding: 0 4px; border: none; background: none; color: #6A655C; font-size: 14px; font-weight: 500; cursor: pointer">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#6A655C" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3L5 8l5 5"></path></svg>
+          Data Structures &amp; Algorithms
+        </button>
+        <span style="padding: 4px 12px; border-radius: 999px; background: #F7EFD3; color: #6B5210; font-size: 13px; font-weight: 700">Learning · 40% mastery</span>
+      </div>
+      <h1 style="margin: 0; font-family: 'Instrument Serif', serif; font-weight: 400; font-size: 46px; line-height: 1.05">Binary Search Trees</h1>
+
+      <!-- Stepper -->
+      <ol aria-label="Learning path" style="list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px">
+        <sc-for list="{{steps}}" as="st" hint-placeholder-count="5">
+          <li style="display: flex">
+            <button onClick="{{st.pick}}" aria-current="{{st.current}}" style="{{st.style}}">
+              <span style="{{st.dotStyle}}">{{st.n}}</span>
+              <span style="display: flex; flex-direction: column; align-items: flex-start; min-width: 0">
+                <span style="font-weight: 700; font-size: 14px">{{st.label}}</span>
+                <span style="font-size: 12px; color: #6A655C; font-weight: 500">{{st.sub}}</span>
+              </span>
+            </button>
+          </li>
+        </sc-for>
+      </ol>
+
+      <div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start">
+        <section style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+
+          <!-- STEP 1: warm-up -->
+          <sc-if value="{{stepWarm}}" hint-placeholder-val="{{ false }}">
+            <article class="lined" style="position: relative; border: 1px solid #E3DED2; border-radius: 6px 18px 18px 6px; padding: 30px 36px 32px 76px; display: flex; flex-direction: column; gap: 18px">
+              <div style="position: absolute; left: 52px; top: 0; bottom: 0; width: 1.5px; background: #E7B3A6"></div>
+              <div style="font-family: 'Caveat', cursive; font-size: 23px; color: #A4521E">guess before you learn</div>
+              <p style="margin: 0; color: #4E4A43">Two quick questions before the lesson. Getting them wrong is fine: guessing first makes the real answer easier to remember.</p>
+              <sc-for list="{{warmQs}}" as="q" hint-placeholder-count="2">
+                <div style="display: flex; flex-direction: column; gap: 8px">
+                  <div style="font-size: 17px; font-weight: 600">{{q.text}}</div>
+                  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+                    <sc-for list="{{q.options}}" as="op" hint-placeholder-count="4">
+                      <button onClick="{{op.pick}}" style="{{op.style}}"><span style="{{op.dotStyle}}">{{op.letter}}</span><span>{{op.label}}</span></button>
+                    </sc-for>
+                  </div>
+                  <sc-if value="{{q.answered}}" hint-placeholder-val="{{ false }}">
+                    <div style="{{q.fbStyle}}"><strong>{{q.fbTitle}}</strong> {{q.explain}}</div>
+                  </sc-if>
+                </div>
+              </sc-for>
+              <button onClick="{{toLearn}}" style="align-self: flex-start; height: 48px; padding: 0 22px; border-radius: 10px; border: none; background: #22201C; color: #FFFDF8; font-weight: 700; cursor: pointer">Start learning</button>
+            </article>
+          </sc-if>
+
+          <!-- STEP 2: learn in chunks -->
+          <sc-if value="{{stepLearn}}" hint-placeholder-val="{{ true }}">
+            <div style="display: flex; gap: 6px">
+              <sc-for list="{{chunkDots}}" as="cd" hint-placeholder-count="3">
+                <span style="flex: 1; height: 6px; border-radius: 3px; background: {{cd.color}}"></span>
+              </sc-for>
+            </div>
+            <article class="lined" style="position: relative; border: 1px solid #E3DED2; border-radius: 6px 18px 18px 6px; padding: 30px 40px 34px 80px; box-shadow: 0 14px 30px -22px rgba(34,32,28,0.45)">
+              <div style="position: absolute; left: 56px; top: 0; bottom: 0; width: 1.5px; background: #E7B3A6"></div>
+              <div style="display: flex; flex-wrap: wrap; gap: 28px">
+                <div style="flex: 999 1 380px; min-width: 0; display: flex; flex-direction: column; gap: 16px; font-size: 16px; line-height: 1.75">
+                  <div style="font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: #6A655C; font-weight: 700">Part {{chunkNum}} of 3</div>
+
+                  <sc-if value="{{chunk0}}" hint-placeholder-val="{{ true }}">
+                    <h2 style="margin: 0; font-size: 24px">What a BST is</h2>
+                    <p style="margin: 0">A <span style="background: #FCE79A; padding: 0 3px">binary search tree</span> is a binary tree where every node's key is greater than all keys in its left subtree and smaller than all keys in its right subtree.</p>
+                    <div style="display: flex; justify-content: center; padding: 8px 0">
+                      <svg width="300" height="150" viewBox="0 0 300 150" fill="none" aria-label="A BST with root 8, children 3 and 10, and leaves 1, 6 and 14">
+                        <path d="M150 28L80 74M150 28L220 74M80 74L45 122M80 74L115 122M220 74L255 122" stroke="#8C8578" stroke-width="1.6"></path>
+                        <g font-family="DM Sans, sans-serif" font-size="15" font-weight="700" text-anchor="middle">
+                          <circle cx="150" cy="28" r="18" fill="#2F5D8A"></circle><text x="150" y="33" fill="#FFFFFF">8</text>
+                          <circle cx="80" cy="74" r="18" fill="#FFFDF8" stroke="#2F5D8A" stroke-width="2"></circle><text x="80" y="79" fill="#22201C">3</text>
+                          <circle cx="220" cy="74" r="18" fill="#FFFDF8" stroke="#2F5D8A" stroke-width="2"></circle><text x="220" y="79" fill="#22201C">10</text>
+                          <circle cx="45" cy="122" r="18" fill="#FFFDF8" stroke="#CFC7B6" stroke-width="2"></circle><text x="45" y="127" fill="#22201C">1</text>
+                          <circle cx="115" cy="122" r="18" fill="#FFFDF8" stroke="#CFC7B6" stroke-width="2"></circle><text x="115" y="127" fill="#22201C">6</text>
+                          <circle cx="255" cy="122" r="18" fill="#FFFDF8" stroke="#CFC7B6" stroke-width="2"></circle><text x="255" y="127" fill="#22201C">14</text>
+                        </g>
+                      </svg>
+                    </div>
+                    <p style="margin: 0">That ordering is why search is fast: at every node you can throw away one whole side of the tree.</p>
+                  </sc-if>
+                  <sc-if value="{{chunk1}}" hint-placeholder-val="{{ false }}">
+                    <h2 style="margin: 0; font-size: 24px">Searching</h2>
+                    <p style="margin: 0">Start at the root. If the key is smaller, go left; if larger, go right. Stop when you find it or fall off the tree.</p>
+                    <pre style="margin: 0; padding: 16px 18px; border-radius: 10px; background: #22201C; color: #F3EEE3; font-family: ui-monospace, Consolas, monospace; font-size: 14px; line-height: 1.6; overflow-x: auto">def search(node, key):
+    while node is not None:
+        if key == node.key:
+            return node
+        node = node.left if key &lt; node.key else node.right
+    return None</pre>
+                    <p style="margin: 0"><strong>Worked example:</strong> searching for 6 in the tree above goes 8 → left to 3 → right to 6. Three comparisons, not six.</p>
+                  </sc-if>
+                  <sc-if value="{{chunk2}}" hint-placeholder-val="{{ false }}">
+                    <h2 style="margin: 0; font-size: 24px">Why balance matters</h2>
+                    <p style="margin: 0">Insert 1, 2, 3, 4, 5 in that order and every node only has a right child. The tree is now a linked list, so search drops to <span style="background: #FCE79A; padding: 0 3px">O(n)</span>. AVL and red-black trees fix this by rotating nodes after inserts and deletes.</p>
+                    <div style="overflow-x: auto; border: 1px solid #E3DED2; border-radius: 10px; background: #FFFDF8">
+                      <table style="width: 100%; border-collapse: collapse; font-size: 14px; line-height: 1.4">
+                        <thead><tr style="background: #F3EFE6"><th style="text-align: left; padding: 9px 14px">Operation</th><th style="text-align: left; padding: 9px 14px">Balanced</th><th style="text-align: left; padding: 9px 14px">Worst case</th></tr></thead>
+                        <tbody>
+                          <tr><td style="padding: 9px 14px; border-top: 1px solid #EEE9DE">Search, insert, delete</td><td style="padding: 9px 14px; border-top: 1px solid #EEE9DE">O(log n)</td><td style="padding: 9px 14px; border-top: 1px solid #EEE9DE">O(n)</td></tr>
+                        </tbody>
+                      </table>
+                    </div>
+                    <p style="margin: 0; font-size: 14px; color: #6A655C">Connects to: <a href="#">AVL tree rotations</a> (week 4) and <a href="#">Linked lists</a> (week 2).</p>
+                  </sc-if>
+
+                  <!-- check question -->
+                  <div style="margin-top: 6px; padding: 16px 18px; border-radius: 12px; background: #FFFDF8; border: 1.5px solid #22201C; display: flex; flex-direction: column; gap: 10px; line-height: 1.5">
+                    <span style="font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: #6A655C; font-weight: 700">Quick check before moving on</span>
+                    <span style="font-weight: 600">{{check.text}}</span>
+                    <div style="display: flex; flex-direction: column; gap: 6px">
+                      <sc-for list="{{check.options}}" as="op" hint-placeholder-count="3">
+                        <button onClick="{{op.pick}}" style="{{op.style}}"><span style="{{op.dotStyle}}">{{op.letter}}</span><span>{{op.label}}</span></button>
+                      </sc-for>
+                    </div>
+                    <sc-if value="{{check.answered}}" hint-placeholder-val="{{ false }}">
+                      <div style="{{check.fbStyle}}"><strong>{{check.fbTitle}}</strong> {{check.explain}}</div>
+                    </sc-if>
+                  </div>
+                  <div style="display: flex; gap: 10px">
+                    <button onClick="{{chunkPrev}}" style="height: 46px; padding: 0 18px; border-radius: 10px; border: 1px solid #E3DED2; background: #FFFDF8; color: #22201C; font-weight: 600; cursor: pointer">Back</button>
+                    <button onClick="{{chunkNext}}" disabled="{{chunkLocked}}" style="{{chunkNextStyle}}">{{chunkNextLabel}}</button>
+                  </div>
+                </div>
+                <aside style="flex: 1 1 160px; display: flex; flex-direction: column; gap: 26px; padding-top: 40px; font-family: 'Caveat', cursive; font-size: 22px; line-height: 1.25; color: #2F5D8A">
+                  <div style="transform: rotate(-2deg)">left &lt; node &lt; right, always!</div>
+                  <div style="transform: rotate(1.5deg)">from slide 14: draw the tree for every example</div>
+                  <div style="transform: rotate(-1deg); color: #A4521E">sorted input = worst case</div>
+                </aside>
+              </div>
+            </article>
+          </sc-if>
+
+          <!-- STEP 3: explain it -->
+          <sc-if value="{{stepExplain}}" hint-placeholder-val="{{ false }}">
+            <article class="lined" style="position: relative; border: 1px solid #E3DED2; border-radius: 6px 18px 18px 6px; padding: 30px 36px 32px 76px; display: flex; flex-direction: column; gap: 14px">
+              <div style="position: absolute; left: 52px; top: 0; bottom: 0; width: 1.5px; background: #E7B3A6"></div>
+              <div style="font-family: 'Caveat', cursive; font-size: 23px; color: #A4521E">teach it back</div>
+              <h2 style="margin: 0; font-family: 'Instrument Serif', serif; font-weight: 400; font-size: 30px">Explain how BST search works to a first-year student</h2>
+              <p style="margin: 0; color: #4E4A43">Use your own words, no notes. If you get stuck, that's the part you don't understand yet.</p>
+              <label style="display: flex; flex-direction: column; gap: 6px">
+                <span class="sr">Your explanation</span>
+                <textarea value="{{explainText}}" onChange="{{onExplain}}" rows="6" style="resize: vertical; padding: 14px 16px; border-radius: 12px; border: 1.5px solid #CFC7B6; background: #FFFDF8; font-size: 16px; color: #22201C; line-height: 1.6"></textarea>
+              </label>
+              <div style="display: flex; flex-wrap: wrap; gap: 10px">
+                <button onClick="{{checkExplain}}" style="height: 46px; padding: 0 20px; border-radius: 10px; border: none; background: #22201C; color: #FFFDF8; font-weight: 700; cursor: pointer">Check my explanation</button>
+                <button style="height: 46px; padding: 0 18px; border-radius: 10px; border: 1px solid #E3DED2; background: #FFFDF8; color: #22201C; font-weight: 600; cursor: pointer">Save as a note</button>
+              </div>
+              <sc-if value="{{explainChecked}}" hint-placeholder-val="{{ false }}">
+                <div style="display: flex; flex-direction: column; gap: 10px; padding: 16px 18px; border-radius: 12px; background: #FFFDF8; border: 1px solid #E3DED2">
+                  <span style="font-weight: 700">Feedback, checked against your lecture files</span>
+                  <div style="display: flex; gap: 10px; align-items: flex-start"><span style="padding: 1px 8px; border-radius: 6px; background: #E3F1E7; color: #1F4A30; font-size: 12px; font-weight: 700">Got it</span><span>You described the ordering rule and going left or right at each node.</span></div>
+                  <div style="display: flex; gap: 10px; align-items: flex-start"><span style="padding: 1px 8px; border-radius: 6px; background: #F8E6E1; color: #6E2615; font-size: 12px; font-weight: 700">Missing</span><span>Why it's only fast when the tree is balanced (O(log n) vs O(n)).</span></div>
+                  <div style="display: flex; gap: 10px; align-items: flex-start"><span style="padding: 1px 8px; border-radius: 6px; background: #E6EEF6; color: #1F4266; font-size: 12px; font-weight: 700">Try</span><span>Add a small example, like searching for 6 in the tree from part 1.</span></div>
+                  <button onClick="{{toPractice}}" style="align-self: flex-start; margin-top: 4px; height: 44px; padding: 0 18px; border-radius: 10px; border: 1px solid #22201C; background: transparent; color: #22201C; font-weight: 700; cursor: pointer">Go to practice</button>
+                </div>
+              </sc-if>
+            </article>
+          </sc-if>
+
+          <!-- STEP 4: practice -->
+          <sc-if value="{{stepPractice}}" hint-placeholder-val="{{ false }}">
+            <section style="background: #FFFDF8; border: 1px solid #E3DED2; border-radius: 16px; padding: 16px 20px; display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: center">
+              <span style="font-size: 13px; font-weight: 700; color: #6A655C">Question types</span>
+              <div style="display: flex; flex-wrap: wrap; gap: 6px">
+                <sc-for list="{{typeChips}}" as="c" hint-placeholder-count="4">
+                  <button onClick="{{c.toggle}}" aria-pressed="{{c.pressed}}" style="{{c.style}}">{{c.label}}</button>
+                </sc-for>
+              </div>
+              <span style="font-size: 13px; color: #6A655C">Mixed with older topics so you practice choosing the right idea, not just repeating the last one.</span>
+            </section>
+            <article class="lined" style="position: relative; border: 1px solid #E3DED2; border-radius: 6px 18px 18px 6px; padding: 28px 36px 32px 76px; display: flex; flex-direction: column; gap: 24px">
+              <div style="position: absolute; left: 52px; top: 0; bottom: 0; width: 1.5px; background: #E7B3A6"></div>
+              <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 10px">
+                <h2 style="margin: 0; font-family: 'Instrument Serif', serif; font-weight: 400; font-size: 30px">Practice</h2>
+                <sc-if value="{{submitted}}" hint-placeholder-val="{{ false }}">
+                  <span style="padding: 8px 16px; border-radius: 12px; background: #22201C; color: #FFFDF8; font-weight: 700">Score {{score}} / {{qTotal}}</span>
+                </sc-if>
+              </div>
+              <sc-if value="{{noTypes}}" hint-placeholder-val="{{ false }}"><p style="margin: 0; color: #6A655C">Turn on at least one question type above.</p></sc-if>
+              <sc-for list="{{questions}}" as="q" hint-placeholder-count="5">
+                <div style="display: flex; flex-direction: column; gap: 10px">
+                  <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 12px">
+                    <span style="font-weight: 700">Q{{q.num}}</span>
+                    <span style="padding: 2px 8px; border-radius: 999px; background: #F3EFE6; color: #4E4A43; font-weight: 700">{{q.typeLabel}}</span>
+                    <span style="color: #6A655C">{{q.topic}}</span>
+                  </div>
+                  <div style="font-size: 17px; font-weight: 500">{{q.text}}</div>
+                  <sc-if value="{{q.hasOptions}}" hint-placeholder-val="{{ true }}">
+                    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+                      <sc-for list="{{q.options}}" as="op" hint-placeholder-count="4">
+                        <button onClick="{{op.pick}}" style="{{op.style}}"><span style="{{op.dotStyle}}">{{op.letter}}</span><span>{{op.label}}</span></button>
+                      </sc-for>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{q.isText}}" hint-placeholder-val="{{ false }}">
+                    <label style="max-width: 420px; display: flex">
+                      <span class="sr">Your answer for question {{q.num}}</span>
+                      <input type="text" value="{{q.value}}" onChange="{{q.onInput}}" placeholder="Type your answer" style="{{q.inputStyle}}">
+                    </label>
+                  </sc-if>
+                  <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px">
+                    <span style="font-size: 12px; color: #6A655C; margin-right: 4px">Confidence</span>
+                    <sc-for list="{{q.confs}}" as="cf" hint-placeholder-count="3">
+                      <button onClick="{{cf.pick}}" aria-pressed="{{cf.pressed}}" style="{{cf.style}}">{{cf.label}}</button>
+                    </sc-for>
+                  </div>
+                  <sc-if value="{{q.showFeedback}}" hint-placeholder-val="{{ false }}">
+                    <div style="{{q.fbStyle}}"><strong>{{q.fbTitle}}</strong> {{q.explain}}</div>
+                  </sc-if>
+                </div>
+              </sc-for>
+              <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center">
+                <sc-if value="{{notSubmitted}}" hint-placeholder-val="{{ true }}">
+                  <button onClick="{{submit}}" style="height: 48px; padding: 0 22px; border-radius: 10px; border: none; background: #2F5D8A; color: #FFFFFF; font-weight: 700; cursor: pointer">Check answers</button>
+                </sc-if>
+                <sc-if value="{{submitted}}" hint-placeholder-val="{{ false }}">
+                  <button onClick="{{toSchedule}}" style="height: 48px; padding: 0 22px; border-radius: 10px; border: none; background: #22201C; color: #FFFDF8; font-weight: 700; cursor: pointer">See my review plan</button>
+                  <button onClick="{{retry}}" style="height: 48px; padding: 0 18px; border-radius: 10px; border: 1px solid #22201C; background: transparent; color: #22201C; font-weight: 600; cursor: pointer">New questions</button>
+                </sc-if>
+              </div>
+            </article>
+          </sc-if>
+
+          <!-- STEP 5: remember -->
+          <sc-if value="{{stepSchedule}}" hint-placeholder-val="{{ false }}">
+            <article class="lined" style="position: relative; border: 1px solid #E3DED2; border-radius: 6px 18px 18px 6px; padding: 30px 36px 32px 76px; display: flex; flex-direction: column; gap: 18px">
+              <div style="position: absolute; left: 52px; top: 0; bottom: 0; width: 1.5px; background: #E7B3A6"></div>
+              <div style="font-family: 'Caveat', cursive; font-size: 23px; color: #A4521E">so you don't forget it</div>
+              <h2 style="margin: 0; font-family: 'Instrument Serif', serif; font-weight: 400; font-size: 30px">Your review plan</h2>
+              <p style="margin: 0; color: #4E4A43">Each review comes just before you'd start to forget. The gaps grow as the memory gets stronger, and they shrink again if you miss something.</p>
+              <div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px">
+                <sc-for list="{{reviews}}" as="rv" hint-placeholder-count="5">
+                  <div style="padding: 12px; border-radius: 12px; background: #FFFDF8; border: 1px solid #E3DED2; display: flex; flex-direction: column; gap: 2px">
+                    <span style="font-weight: 700">{{rv.when}}</span>
+                    <span style="font-size: 12px; color: #6A655C">{{rv.date}}</span>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 8px">
+                <span style="font-weight: 700">Added to your flashcards</span>
+                <sc-for list="{{newCards}}" as="nc" hint-placeholder-count="4">
+                  <div style="display: flex; justify-content: space-between; gap: 12px; padding: 10px 14px; background: #FFFDF8; border: 1px solid #E3DED2; border-radius: 10px; font-size: 14px">
+                    <span>{{nc.front}}</span>
+                    <span style="font-size: 12px; font-weight: 700; color: {{nc.tagColor}}">{{nc.tag}}</span>
+                  </div>
+                </sc-for>
+              </div>
+              <button onClick="{{openDsa}}" style="align-self: flex-start; height: 48px; padding: 0 22px; border-radius: 10px; border: none; background: #22201C; color: #FFFDF8; font-weight: 700; cursor: pointer">Done, back to topics</button>
+            </article>
+          </sc-if>
+        </section>
+
+        <aside style="flex: 1 1 260px; display: flex; flex-direction: column; gap: 16px">
+          <section style="background: #FFFDF8; border: 1px solid #E3DED2; border-radius: 16px; padding: 18px 20px; display: flex; flex-direction: column; gap: 8px">
+            <h2 style="margin: 0; font-size: 16px">Key terms</h2>
+            <div style="display: flex; flex-wrap: wrap; gap: 6px">
+              <span style="padding: 4px 10px; border-radius: 8px; background: #FCE79A; font-size: 13px">root</span>
+              <span style="padding: 4px 10px; border-radius: 8px; background: #FCE79A; font-size: 13px">subtree</span>
+              <span style="padding: 4px 10px; border-radius: 8px; background: #FCE79A; font-size: 13px">height</span>
+              <span style="padding: 4px 10px; border-radius: 8px; background: #FCE79A; font-size: 13px">in-order successor</span>
+              <span style="padding: 4px 10px; border-radius: 8px; background: #FCE79A; font-size: 13px">balanced</span>
+            </div>
+          </section>
+          <section style="background: #FFFDF8; border: 1px solid #E3DED2; border-radius: 16px; padding: 18px 20px; display: flex; flex-direction: column; gap: 6px">
+            <h2 style="margin: 0 0 4px; font-size: 16px">Built from</h2>
+            <span style="font-size: 13px">Week 05 – Binary Search Trees.pptx</span>
+            <span style="font-size: 13px">DSA Syllabus 2026.pdf (week 4)</span>
+            <span style="font-size: 13px">Midterm Exam 2025.pdf (questions 6 to 9)</span>
+          </section>
+          <section style="background: #FFFDF8; border: 1px solid #E3DED2; border-radius: 16px; padding: 18px 20px; display: flex; flex-direction: column; gap: 6px">
+            <h2 style="margin: 0 0 4px; font-size: 16px">My notes</h2>
+            <span style="font-family: 'Caveat', cursive; font-size: 21px; line-height: 1.25; color: #2F5D8A">deleting with 2 children: swap with smallest in right subtree, then delete that</span>
+          </section>
+        </aside>
+      </div>
+    </main>
+  </sc-if>
+
+  <!-- ===================== INSIGHTS ===================== -->
+  <sc-if value="{{isInsights}}" hint-placeholder-val="{{ false }}">
+    <main style="width: 100%; max-width: 1240px; margin: 0 auto; padding: 36px 28px 64px; box-sizing: border-box; display: flex; flex-direction: column; gap: 24px">
+      <div>
+        <h1 style="margin: 0; font-family: 'Instrument Serif', serif; font-weight: 400; font-size: 46px; line-height: 1.05">Insights</h1>
+        <p style="margin: 6px 0 0; color: #6A655C">Where your understanding is weak, and whether you know what you think you know.</p>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start">
+        <section style="flex: 999 1 520px; min-width: 0; background: #FFFDF8; border: 1px solid #E3DED2; border-radius: 16px; overflow: hidden">
+          <div style="padding: 18px 22px 8px; display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap">
+            <h2 style="margin: 0; font-family: 'Instrument Serif', serif; font-weight: 400; font-size: 28px">Weak topics</h2>
+            <span style="font-size: 13px; color: #6A655C">All subjects, lowest first</span>
+          </div>
+          <sc-for list="{{weak}}" as="w" hint-placeholder-count="6">
+            <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 14px; padding: 14px 22px; border-top: 1px solid #EEE9DE">
+              <div style="flex: 1 1 220px; min-width: 0">
+                <div style="font-weight: 700">{{w.topic}}</div>
+                <div style="font-size: 13px; color: #6A655C">{{w.subject}} · {{w.status}} · {{w.why}}</div>
+              </div>
+              <div style="flex: 1 1 160px; display: flex; align-items: center; gap: 10px">
+                <div style="flex: 1; height: 10px; border-radius: 5px; background: #EEE9DE; overflow: hidden"><div style="height: 10px; width: {{w.pct}}%; background: {{w.color}}"></div></div>
+                <span style="width: 42px; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums">{{w.pct}}%</span>
+              </div>
+              <button onClick="{{openTopic}}" style="height: 40px; padding: 0 14px; border-radius: 9px; border: 1px solid #22201C; background: transparent; color: #22201C; font-weight: 700; font-size: 14px; cursor: pointer">Relearn</button>
+            </div>
+          </sc-for>
+        </section>
+        <aside style="flex: 1 1 320px; display: flex; flex-direction: column; gap: 18px">
+          <section style="background: #FFFDF8; border: 1px solid #E3DED2; border-radius: 16px; padding: 20px 22px; display: flex; flex-direction: column; gap: 12px">
+            <h2 style="margin: 0; font-size: 16px">Do you know what you think you know?</h2>
+            <sc-for list="{{calib}}" as="cb" hint-placeholder-count="3">
+              <div style="display: flex; flex-direction: column; gap: 4px">
+                <div style="display: flex; justify-content: space-between; font-size: 13px"><span>When you said <strong>{{cb.label}}</strong></span><span style="font-weight: 700">{{cb.pct}}% correct</span></div>
+                <div style="height: 8px; border-radius: 4px; background: #EEE9DE; overflow: hidden"><div style="height: 8px; width: {{cb.pct}}%; background: {{cb.color}}"></div></div>
+              </div>
+            </sc-for>
+            <p style="margin: 0; font-size: 13px; color: #4E4A43">You were <strong>sure but wrong</strong> 7 times this week, mostly on hashing. Those are the most dangerous mistakes, so they come back first.</p>
+          </section>
+          <section style="background: #FFFDF8; border: 1px solid #E3DED2; border-radius: 16px; padding: 20px 22px; display: flex; flex-direction: column; gap: 10px">
+            <h2 style="margin: 0; font-size: 16px">Reviews due, next 7 days</h2>
+            <div style="display: flex; align-items: flex-end; gap: 8px; height: 110px">
+              <sc-for list="{{forecast}}" as="fc" hint-placeholder-count="7">
+                <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px; height: 100%">
+                  <span style="font-size: 11px; color: #6A655C">{{fc.n}}</span>
+                  <div style="width: 100%; max-width: 26px; height: {{fc.h}}px; border-radius: 5px 5px 2px 2px; background: {{fc.color}}"></div>
+                  <span style="font-size: 12px; font-weight: 600">{{fc.d}}</span>
+                </div>
+              </sc-for>
+            </div>
+          </section>
+          <section style="background: #FFFDF8; border: 1px solid #E3DED2; border-radius: 16px; padding: 20px 22px; display: flex; flex-direction: column; gap: 8px">
+            <h2 style="margin: 0; font-size: 16px">Mistake log</h2>
+            <span style="font-size: 14px">"Hash tables are always O(1)" · <span style="color: #6A655C">OS quiz, Oct 1</span></span>
+            <span style="font-size: 14px">Mixed up AVL left and right rotation · <span style="color: #6A655C">Sep 30</span></span>
+            <span style="font-size: 14px">Banker's algorithm safe state · <span style="color: #6A655C">Sep 29</span></span>
+            <span style="font-size: 13px; color: #6A655C">Every wrong answer becomes a flashcard automatically.</span>
+          </section>
+        </aside>
+      </div>
+    </main>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1100}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = {
+      screen: 'today', subj: 'dsa',
+      sIdx: 0, sStage: 'ask', sConf: '', sAnswer: '', sResults: [],
+      step: 'learn', warm: {}, chunk: 0, checks: {},
+      explainText: 'You start at the root and compare. If the key is smaller you go left, if bigger you go right, and you keep going until you find it.',
+      explainChecked: false,
+      answers: {}, confs: {}, submitted: false,
+      types: { mc: true, fill: true, id: true, tf: true },
+      pomoMode: 'focus', pomoLeft: 1500, pomoRunning: false
+    };
+  }
+
+  componentDidMount() {
+    this.timer = setInterval(() => {
+      if (!this.state.pomoRunning) return;
+      const left = this.state.pomoLeft - 1;
+      if (left <= 0) {
+        const next = this.state.pomoMode === 'focus' ? 'break' : 'focus';
+        this.setState({ pomoMode: next, pomoLeft: next === 'focus' ? 1500 : 300, pomoRunning: false });
+      } else this.setState({ pomoLeft: left });
+    }, 1000);
+  }
+
+  componentWillUnmount() { clearInterval(this.timer); }
+
+  renderVals() {
+    const S = this.state;
+    const set = (o) => this.setState(o);
+    const go = (screen, extra) => set(Object.assign({ screen }, extra || {}));
+
+    const subjects = [
+      { id: 'dsa', name: 'Data Structures & Algorithms', code: 'CS 201', color: '#2F5D8A', tint: '#E6EEF6', ink: '#1F4266', mastery: 68, examName: 'Midterm', examWhen: 'Oct 12' },
+      { id: 'os', name: 'Operating Systems', code: 'CS 310', color: '#A4521E', tint: '#F8EBE1', ink: '#7A3A12', mastery: 54, examName: 'Quiz 3', examWhen: 'Oct 7' },
+      { id: 'db', name: 'Database Systems', code: 'CS 305', color: '#2E7D73', tint: '#E2F1EE', ink: '#1C5850', mastery: 71, examName: 'Midterm', examWhen: 'Oct 19' },
+      { id: 'dm', name: 'Discrete Mathematics', code: 'MATH 210', color: '#6B4FA0', tint: '#EEE9F6', ink: '#4A3475', mastery: 62, examName: 'Long exam', examWhen: 'Oct 15' },
+      { id: 'net', name: 'Computer Networks', code: 'CS 320', color: '#3F7A3A', tint: '#E6F0E4', ink: '#2B5728', mastery: 45, examName: 'Quiz 2', examWhen: 'Oct 21' },
+      { id: 'se', name: 'Software Engineering', code: 'CS 330', color: '#A8456B', tint: '#F5E6EC', ink: '#7A2C4B', mastery: 80, examName: 'Project demo', examWhen: 'Nov 2' }
+    ];
+    const byId = {}; subjects.forEach((s) => { byId[s.id] = s; });
+    const subj = byId[S.subj] || subjects[0];
+    const isDemo = subj.id === 'dsa';
+
+    // nav
+    const navActive = S.screen === 'insights' ? 'insights' : (S.screen === 'notebook' || S.screen === 'topic') ? 'notebooks' : 'today';
+    const navItems = [['today', 'Today'], ['notebooks', 'Notebooks'], ['insights', 'Insights']].map(([k, label]) => ({
+      label, current: navActive === k ? 'page' : 'false',
+      pick: () => k === 'notebooks' ? go('notebook') : go(k),
+      style: 'height: 38px; padding: 0 16px; border-radius: 9px; border: none; font-size: 14px; font-weight: 600; cursor: pointer; '
+        + (navActive === k ? 'background: #FFFDF8; color: #22201C; box-shadow: 0 1px 3px rgba(0,0,0,0.12)' : 'background: transparent; color: #6A655C')
+    }));
+
+    // pomodoro
+    const total = S.pomoMode === 'focus' ? 1500 : 300;
+    const mm = Math.floor(S.pomoLeft / 60), ss = S.pomoLeft % 60;
+
+    // today
+    const planBlocks = [
+      { n: 1, title: 'Review 18 cards', time: '12 min', detail: 'Mixed: DSA, Operating Systems and Database Systems', why: 'these are about to slip from memory', bg: '#22201C', fg: '#FFFDF8' },
+      { n: 2, title: 'Fix 3 weak spots', time: '15 min', detail: 'Hash collisions · Deadlock avoidance · AVL rotations', why: 'you keep missing these, and 2 are on upcoming exams', bg: '#F8E6E1', fg: '#6E2615' },
+      { n: 3, title: 'Learn: Binary Search Trees', time: '20 min', detail: 'DSA · week 4 of the syllabus', why: 'next up before your Oct 12 midterm', bg: '#E6EEF6', fg: '#1F4266' }
+    ];
+    const exams = [
+      { name: 'OS Quiz 3', days: 4, ready: 54, color: '#A4521E', note: 'Weakest: deadlock avoidance, paging' },
+      { name: 'DSA Midterm', days: 9, ready: 68, color: '#2F5D8A', note: '2 topics not started yet: graphs, shortest paths' }
+    ];
+
+    // session
+    const deck = [
+      { s: 'dsa', topic: 'Hashing', q: 'What is separate chaining?', a: 'Each bucket holds a list of every entry that hashed to it, so a collision just adds to that list.', src: 'Hashing notes.txt' },
+      { s: 'os', topic: 'Deadlocks', q: 'Name the four conditions needed for a deadlock.', a: 'Mutual exclusion, hold and wait, no preemption, and circular wait. Break any one and deadlock cannot happen.', src: 'Lecture 05 – Deadlocks.pdf, page 12' },
+      { s: 'dsa', topic: 'AVL trees', q: 'When do you use a single left rotation in an AVL tree?', a: 'When a node is right-heavy and its right child is also right-heavy (the right-right case).', src: 'Week 05 – Binary Search Trees.pptx, slide 22' },
+      { s: 'db', topic: 'Normalization', q: 'What does Third Normal Form add on top of Second Normal Form?', a: 'No transitive dependencies: every non-key column depends only on the key, not on another non-key column.', src: 'Lecture 03 – Normalization.pptx, slide 17' },
+      { s: 'dsa', topic: 'Heaps', q: 'How long does it take to build a heap from an unsorted array?', a: 'O(n) using bottom-up heapify, even though a single sift-down is O(log n).', src: 'Lecture 06 – Heaps and Priority Queues.pdf, page 8' },
+      { s: 'os', topic: 'Deadlocks', q: 'What is the difference between deadlock prevention and deadlock avoidance?', a: 'Prevention designs the system so one of the four conditions can never hold. Avoidance (like the Banker\'s algorithm) checks each request and only grants it if the system stays in a safe state.', src: 'Lecture 05 – Deadlocks.pdf, page 18' }
+    ];
+    const sDoneFlag = S.sIdx >= deck.length;
+    const cur = deck[Math.min(S.sIdx, deck.length - 1)];
+    const cs = byId[cur.s];
+    const sItem = { q: cur.q, a: cur.a, src: cur.src, topic: cur.topic, subject: cs.code, tint: cs.tint, ink: cs.ink };
+    const gradeDefs = [['Forgot', 'again in 1 min', '#9E3A24', false], ['Hard', 'in 1 day', '#C98A3E', true], ['Good', 'in 3 days', '#2F5D8A', true], ['Easy', 'in 8 days', '#2E6B45', true]];
+    const grades = gradeDefs.map(([label, next, border, ok]) => ({
+      label, next, border,
+      pick: () => set({ sResults: S.sResults.concat([{ conf: S.sConf, ok }]), sIdx: S.sIdx + 1, sStage: 'ask', sConf: '', sAnswer: '' })
+    }));
+    const confOpts = ['Sure', 'Unsure', 'Guessing'].map((label) => ({ label, pick: () => set({ sConf: label, sStage: 'reveal' }) }));
+
+    // notebook topics
+    const stateDefs = {
+      Mastered: ['#E3F1E7', '#2E6B45'], Reviewing: ['#E6EEF6', '#2F5D8A'], Learning: ['#F7EFD3', '#8A6A12'],
+      Weak: ['#F8E6E1', '#9E3A24'], 'Not started': ['#EEE9DE', '#6A655C']
+    };
+    const legend = Object.keys(stateDefs).map((k) => ({ label: k, color: stateDefs[k][1] }));
+    const topicRows = isDemo ? [
+      ['Weeks 1–2', 'Big-O analysis', 'Mastered', 91, 'Next review Oct 12'],
+      ['Week 2', 'Arrays and linked lists', 'Mastered', 86, 'Next review Oct 9'],
+      ['Week 3', 'Stacks and queues', 'Reviewing', 78, 'Next review Oct 5'],
+      ['Week 4', 'Tree traversal', 'Reviewing', 74, 'Review due tomorrow'],
+      ['Week 4', 'Binary search trees', 'Learning', 40, 'Part 2 of 3 · continue today'],
+      ['Week 4', 'AVL tree rotations', 'Weak', 55, 'Missed 5 of 11 · review today'],
+      ['Week 5', 'Heaps and priority queues', 'Reviewing', 64, 'Review due tomorrow'],
+      ['Week 6', 'Hash collision handling', 'Weak', 48, 'Missed 9 of 17 · review today'],
+      ['Week 7', 'Graphs: BFS and DFS', 'Not started', 0, 'On the midterm'],
+      ['Week 8', 'Shortest paths', 'Not started', 0, 'On the midterm']
+    ] : [];
+    const topics = topicRows.map(([week, name, state, pct, next]) => {
+      const c = stateDefs[state];
+      const action = state === 'Not started' ? 'Learn' : state === 'Learning' ? 'Continue' : state === 'Weak' ? 'Relearn' : 'Review';
+      const strong = state === 'Learning' || state === 'Weak';
+      return {
+        week, name, state, pct: Math.max(pct, 3), next, bg: c[0], fg: c[1], action,
+        open: () => go('topic', { step: state === 'Not started' ? 'warm' : 'learn' }),
+        btnStyle: 'width: 92px; height: 38px; border-radius: 9px; font-weight: 700; font-size: 13px; cursor: pointer; '
+          + (strong ? 'border: none; background: #22201C; color: #FFFDF8' : 'border: 1px solid #CFC7B6; background: transparent; color: #22201C')
+      };
+    });
+    const filesBy = {
+      dsa: [['DSA Syllabus 2026.pdf', 'Syllabus'], ['Week 05 – Binary Search Trees.pptx', 'Slides'], ['Lecture 06 – Heaps and Priority Queues.pdf', 'Lesson'], ['Quiz 3 – Linked Lists.docx', 'Quiz'], ['Midterm Exam 2025.pdf', 'Past exam'], ['Hashing notes.txt', 'Notes']],
+      os: [['OS Syllabus 2026.pdf', 'Syllabus'], ['Lecture 04 – CPU Scheduling.pptx', 'Slides'], ['Lecture 05 – Deadlocks.pdf', 'Lesson'], ['Quiz 2 – Processes.docx', 'Quiz']],
+      db: [['Database Systems Syllabus.pdf', 'Syllabus'], ['Lecture 03 – Normalization.pptx', 'Slides'], ['SQL Joins cheat sheet.pdf', 'Notes']],
+      dm: [['Discrete Math Syllabus.pdf', 'Syllabus'], ['Chapter 2 – Proofs by Induction.pdf', 'Lesson'], ['Problem Set 3.pdf', 'Quiz']],
+      net: [['Networks Syllabus.pdf', 'Syllabus'], ['Lecture 02 – OSI and TCP-IP.pptx', 'Slides']],
+      se: [['SE Syllabus.pdf', 'Syllabus'], ['Lecture 01 – Agile and Scrum.pptx', 'Slides'], ['Group project brief.docx', 'Notes']]
+    };
+    const extColors = { PDF: ['#F8E6E1', '#8E3520'], PPTX: ['#F8EBE1', '#8A4316'], DOCX: ['#E6EEF6', '#1F4266'], TXT: ['#EEE9DE', '#4E4A43'] };
+    const files = (filesBy[subj.id] || []).map(([name, kind]) => {
+      const ext = name.split('.').pop().toUpperCase();
+      const c = extColors[ext] || extColors.TXT;
+      return { name, kind, ext, badgeBg: c[0], badgeFg: c[1] };
+    });
+
+    // shared option styling
+    const optBase = 'display: flex; align-items: center; gap: 12px; width: 100%; min-height: 46px; padding: 8px 14px; border-radius: 10px; text-align: left; font-size: 15px; color: #22201C; cursor: pointer; ';
+    const dotBase = 'width: 26px; height: 26px; flex: none; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; ';
+    const optView = (label, j, chosen, answer, reveal) => {
+      const sel = chosen === label;
+      let style = optBase + 'border: 1.5px solid #E3DED2; background: #FFFDF8';
+      let dot = dotBase + 'border: 1.5px solid #CFC7B6; color: #4E4A43; background: #FFFDF8';
+      if (sel) { style = optBase + 'border: 1.5px solid #2F5D8A; background: #E6EEF6'; dot = dotBase + 'background: #2F5D8A; color: #FFFFFF; border: 1.5px solid #2F5D8A'; }
+      if (reveal && label === answer) { style = optBase + 'border: 1.5px solid #2E6B45; background: #E3F1E7'; dot = dotBase + 'background: #2E6B45; color: #FFFFFF; border: 1.5px solid #2E6B45'; }
+      else if (reveal && sel) { style = optBase + 'border: 1.5px solid #9E3A24; background: #F8E6E1'; dot = dotBase + 'background: #9E3A24; color: #FFFFFF; border: 1.5px solid #9E3A24'; }
+      return { label, letter: 'ABCD'[j], style, dotStyle: dot };
+    };
+    const fb = (ok) => 'padding: 10px 14px; border-radius: 10px; font-size: 14px; line-height: 1.5; ' + (ok ? 'background: #E3F1E7; color: #1F4A30' : 'background: #F8E6E1; color: #6E2615');
+
+    // topic steps
+    const stepDefs = [['warm', 'Warm-up', 'Guess first'], ['learn', 'Learn', 'In small parts'], ['explain', 'Explain it', 'In your words'], ['practice', 'Practice', 'Mixed questions'], ['schedule', 'Remember', 'Review plan']];
+    const stepIdx = stepDefs.findIndex((d) => d[0] === S.step);
+    const steps = stepDefs.map(([k, label, sub], i) => {
+      const active = i === stepIdx, done = i < stepIdx;
+      return {
+        n: done ? '✓' : String(i + 1), label, sub, current: active ? 'step' : 'false',
+        pick: () => set({ step: k }),
+        style: 'flex: 1; display: flex; align-items: center; gap: 10px; min-height: 56px; padding: 8px 12px; border-radius: 12px; text-align: left; cursor: pointer; color: #22201C; '
+          + (active ? 'background: #FFFDF8; border: 1.5px solid #22201C; box-shadow: 0 8px 18px -14px rgba(34,32,28,0.6)' : 'background: rgba(255,253,248,0.6); border: 1.5px solid #E3DED2'),
+        dotStyle: dotBase + 'width: 30px; height: 30px; ' + (active ? 'background: #22201C; color: #FFFDF8' : done ? 'background: #2E6B45; color: #FFFFFF' : 'background: #EEE9DE; color: #4E4A43')
+      };
+    });
+
+    const warmDefs = [
+      { id: 'w1', text: 'In a BST, where is the smallest key?', options: ['At the root', 'The leftmost node', 'The rightmost node', 'Any leaf'], answer: 'The leftmost node', explain: 'Smaller keys always go left, so keep going left until you can\'t.' },
+      { id: 'w2', text: 'Roughly how many steps to search a balanced BST of 1,000 keys?', options: ['About 10', 'About 100', 'About 500', 'About 1,000'], answer: 'About 10', explain: 'Each step halves what\'s left, and 2 to the power of 10 is about 1,000.' }
+    ];
+    const warmQs = warmDefs.map((q) => {
+      const chosen = S.warm[q.id], answered = !!chosen, ok = chosen === q.answer;
+      return {
+        text: q.text, answered, explain: q.explain, fbStyle: fb(ok),
+        fbTitle: ok ? 'Nice guess.' : 'Good try. It\'s "' + q.answer + '".',
+        options: q.options.map((label, j) => Object.assign(optView(label, j, chosen, q.answer, answered), {
+          pick: () => { if (!answered) set({ warm: Object.assign({}, S.warm, { [q.id]: label }) }); }
+        }))
+      };
+    });
+
+    const checkDefs = [
+      { text: 'A node has key 20. Where can the key 25 appear?', options: ['Only in its left subtree', 'Only in its right subtree', 'In either subtree'], answer: 'Only in its right subtree', explain: '25 is bigger than 20, and everything bigger goes right.' },
+      { text: 'Searching for 6 in the tree from part 1, which node do you visit second?', options: ['10', '3', '1'], answer: '3', explain: '6 is smaller than 8, so you go left to 3 first.' },
+      { text: 'Which insert order gives the worst-case tree?', options: ['5, 3, 8, 1, 4', '1, 2, 3, 4, 5', '3, 1, 4, 2, 5'], answer: '1, 2, 3, 4, 5', explain: 'Sorted input puts every node on the right, making a chain of height n.' }
+    ];
+    const cd = checkDefs[S.chunk];
+    const cChosen = S.checks[S.chunk], cAnswered = !!cChosen, cOk = cChosen === cd.answer;
+    const check = {
+      text: cd.text, answered: cAnswered, explain: cd.explain, fbStyle: fb(cOk),
+      fbTitle: cOk ? 'Correct.' : 'Not quite. The answer is ' + cd.answer + '.',
+      options: cd.options.map((label, j) => Object.assign(optView(label, j, cChosen, cd.answer, cAnswered), {
+        pick: () => { if (!cAnswered) set({ checks: Object.assign({}, S.checks, { [S.chunk]: label }) }); }
+      }))
+    };
+    const chunkDots = [0, 1, 2].map((i) => ({ color: i < S.chunk ? '#2E6B45' : i === S.chunk ? '#22201C' : '#E3DED2' }));
+
+    // practice
+    const allQ = [
+      { id: 'q1', type: 'mc', typeLabel: 'Multiple choice', topic: 'Binary search trees', text: 'What is the worst-case time to search an unbalanced BST with n nodes?', options: ['O(1)', 'O(log n)', 'O(n)', 'O(n log n)'], answer: 'O(n)', explain: 'Sorted inserts turn the tree into one long chain, so you may visit all n nodes.' },
+      { id: 'q2', type: 'fill', typeLabel: 'Fill in the blank', topic: 'Heaps (from week 5)', text: 'In a min-heap, the smallest element is always stored at the ______.', accept: ['root', 'the root', 'top', 'the top'], answer: 'root', explain: 'Every parent is smaller than or equal to its children, so the minimum sits at the root.' },
+      { id: 'q3', type: 'id', typeLabel: 'Identification', topic: 'Tree traversal', text: 'Which traversal of a BST lists its keys in sorted order?', accept: ['inorder', 'in-order', 'in order', 'inorder traversal', 'in-order traversal', 'in order traversal'], answer: 'In-order traversal', explain: 'Left, node, right visits smaller keys first, then the node, then bigger keys.' },
+      { id: 'q4', type: 'tf', typeLabel: 'True or false', topic: 'Hashing (from week 6)', text: 'A hash table guarantees O(1) lookups even in the worst case.', options: ['True', 'False'], answer: 'False', explain: 'O(1) is the average. If many keys collide into one bucket, a lookup can take O(n).' },
+      { id: 'q5', type: 'mc', typeLabel: 'Multiple choice', topic: 'Binary search trees', text: 'You delete a node with two children. Which node usually replaces it?', options: ['Its parent', 'Its in-order successor', 'The root', 'Any leaf'], answer: 'Its in-order successor', explain: 'The smallest key in the right subtree keeps the ordering rule intact.' }
+    ];
+    const visible = allQ.filter((q) => S.types[q.type]);
+    const norm = (v) => String(v || '').trim().toLowerCase();
+    const isRight = (q) => q.accept ? q.accept.indexOf(norm(S.answers[q.id])) !== -1 : S.answers[q.id] === q.answer;
+    const confChip = 'height: 32px; padding: 0 12px; border-radius: 999px; font-size: 12px; font-weight: 700; cursor: pointer; ';
+    const questions = visible.map((q, i) => {
+      const chosen = S.answers[q.id], ok = isRight(q), conf = S.confs[q.id];
+      const sureWrong = S.submitted && !ok && conf === 'Sure';
+      return {
+        num: i + 1, typeLabel: q.typeLabel, topic: q.topic, text: q.text,
+        hasOptions: !!q.options, isText: !q.options,
+        options: (q.options || []).map((label, j) => Object.assign(optView(label, j, chosen, q.answer, S.submitted), {
+          pick: () => { if (!S.submitted) set({ answers: Object.assign({}, S.answers, { [q.id]: label }) }); }
+        })),
+        value: chosen || '',
+        onInput: (e) => set({ answers: Object.assign({}, S.answers, { [q.id]: e.target.value }) }),
+        inputStyle: 'width: 100%; box-sizing: border-box; height: 46px; padding: 0 14px; border-radius: 10px; border: 1.5px solid ' + (S.submitted ? (ok ? '#2E6B45' : '#9E3A24') : '#CFC7B6') + '; background: #FFFDF8; font-size: 16px; color: #22201C',
+        confs: ['Sure', 'Unsure', 'Guessing'].map((label) => ({
+          label, pressed: conf === label ? 'true' : 'false',
+          pick: () => set({ confs: Object.assign({}, S.confs, { [q.id]: label }) }),
+          style: confChip + (conf === label ? 'background: #22201C; color: #FFFDF8; border: 1.5px solid #22201C' : 'background: #FFFDF8; color: #4E4A43; border: 1.5px solid #CFC7B6')
+        })),
+        showFeedback: S.submitted, explain: q.explain, fbStyle: fb(ok),
+        fbTitle: ok ? 'Correct.' : (sureWrong ? 'You were sure, but the answer is ' + q.answer + '. Flagged for review.' : 'Not quite. The answer is ' + q.answer + '.')
+      };
+    });
+    const chipBase = 'height: 36px; padding: 0 14px; border-radius: 999px; font-size: 13px; font-weight: 700; cursor: pointer; ';
+    const typeChips = [['mc', 'Multiple choice'], ['fill', 'Fill in the blanks'], ['id', 'Identification'], ['tf', 'True or false']].map(([k, label]) => {
+      const on = S.types[k];
+      return {
+        label, pressed: on ? 'true' : 'false',
+        toggle: () => set({ types: Object.assign({}, S.types, { [k]: !on }), submitted: false }),
+        style: chipBase + (on ? 'background: #22201C; color: #FFFDF8; border: 1.5px solid #22201C' : 'background: #FFFDF8; color: #4E4A43; border: 1.5px solid #CFC7B6')
+      };
+    });
+
+    // insights
+    const statusOf = (p) => p < 60 ? ['Needs work', '#9E3A24'] : p < 80 ? ['Getting there', '#C98A3E'] : ['Strong', '#2E6B45'];
+    const weak = [
+      ['Hash collision handling', 'CS 201', 48, 'sure but wrong 4 times'],
+      ['Deadlock avoidance', 'CS 310', 52, 'on Quiz 3 in 4 days'],
+      ['AVL tree rotations', 'CS 201', 55, 'mixes up left and right'],
+      ['Paging and page tables', 'CS 310', 58, 'missed 6 of 14'],
+      ['Proofs by induction', 'MATH 210', 63, 'slow answers'],
+      ['Heaps and priority queues', 'CS 201', 64, 'improving this week']
+    ].map(([topic, subject, pct, why]) => {
+      const st = statusOf(pct);
+      return { topic, subject, pct, why, status: st[0], color: st[1] };
+    });
+    const calib = [['Sure', 88, '#2E6B45'], ['Unsure', 61, '#C98A3E'], ['Guessing', 34, '#9E3A24']].map(([label, pct, color]) => ({ label, pct, color }));
+    const fcN = [18, 11, 14, 7, 22, 9, 12];
+    const fcD = ['Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+    const forecast = fcN.map((n, i) => ({ n, d: fcD[i], h: Math.round(n / 22 * 80), color: i === 0 ? '#22201C' : '#CFC7B6' }));
+
+    const recalled = S.sResults.filter((r) => r.ok).length;
+
+    return {
+      navItems,
+      pomoTime: mm + ':' + (ss < 10 ? '0' : '') + ss,
+      pomoLabel: S.pomoMode === 'focus' ? 'Focus' : 'Break',
+      pomoRunning: S.pomoRunning, pomoPaused: !S.pomoRunning,
+      pomoPct: Math.round((1 - S.pomoLeft / total) * 100),
+      pomoColor: S.pomoMode === 'focus' ? '#A4521E' : '#2E7D73',
+      pomoBtnLabel: S.pomoRunning ? 'Pause timer' : 'Start timer',
+      pomoToggle: () => set({ pomoRunning: !S.pomoRunning }),
+      pomoReset: () => set({ pomoRunning: false, pomoLeft: total }),
+
+      isToday: S.screen === 'today', isSession: S.screen === 'session', isNotebook: S.screen === 'notebook',
+      isTopic: S.screen === 'topic', isInsights: S.screen === 'insights',
+      goToday: () => go('today'),
+      openDsa: () => go('notebook', { subj: 'dsa' }),
+      openTopic: () => go('topic', { step: 'learn' }),
+
+      planBlocks, exams,
+      subjects: subjects.map((s) => Object.assign({}, s, { open: () => go('notebook', { subj: s.id }) })),
+      startSession: () => go('session', { sIdx: 0, sStage: 'ask', sConf: '', sAnswer: '', sResults: [], pomoRunning: true }),
+
+      sActive: !sDoneFlag, sDone: sDoneFlag,
+      sNum: Math.min(S.sIdx + 1, deck.length), sTotal: deck.length,
+      sPct: Math.round(S.sIdx / deck.length * 100),
+      sItem, sAnswer: S.sAnswer, sOnAnswer: (e) => set({ sAnswer: e.target.value }),
+      sAsking: S.sStage === 'ask', sRevealed: S.sStage === 'reveal', sConf: S.sConf,
+      confOpts, grades,
+      sRecalled: recalled, sMissed: S.sResults.length - recalled,
+      sOverconfident: S.sResults.filter((r) => !r.ok && r.conf === 'Sure').length,
+
+      subj, legend, topics, hasTopics: topics.length > 0, noTopics: topics.length === 0, files, fileCount: files.length,
+
+      steps, stepWarm: S.step === 'warm', stepLearn: S.step === 'learn', stepExplain: S.step === 'explain',
+      stepPractice: S.step === 'practice', stepSchedule: S.step === 'schedule',
+      warmQs, toLearn: () => set({ step: 'learn', chunk: 0 }),
+      chunk0: S.chunk === 0, chunk1: S.chunk === 1, chunk2: S.chunk === 2, chunkNum: S.chunk + 1, chunkDots, check,
+      chunkLocked: !cAnswered,
+      chunkNextLabel: S.chunk === 2 ? 'Finish: explain it' : 'Next part',
+      chunkNextStyle: 'height: 46px; padding: 0 22px; border-radius: 10px; border: none; font-weight: 700; '
+        + (cAnswered ? 'background: #22201C; color: #FFFDF8; cursor: pointer' : 'background: #E3DED2; color: #6A655C; cursor: not-allowed'),
+      chunkNext: () => { if (!cAnswered) return; S.chunk === 2 ? set({ step: 'explain' }) : set({ chunk: S.chunk + 1 }); },
+      chunkPrev: () => S.chunk === 0 ? set({ step: 'warm' }) : set({ chunk: S.chunk - 1 }),
+      explainText: S.explainText, onExplain: (e) => set({ explainText: e.target.value, explainChecked: false }),
+      explainChecked: S.explainChecked, checkExplain: () => set({ explainChecked: true }),
+      toPractice: () => set({ step: 'practice' }),
+
+      typeChips, questions, qTotal: visible.length, score: visible.filter(isRight).length, noTypes: visible.length === 0,
+      submitted: S.submitted, notSubmitted: !S.submitted,
+      submit: () => set({ submitted: true }),
+      retry: () => set({ answers: {}, confs: {}, submitted: false }),
+      toSchedule: () => set({ step: 'schedule' }),
+      reviews: [['Tomorrow', 'Oct 4'], ['In 3 days', 'Oct 6'], ['In 1 week', 'Oct 10'], ['Before midterm', 'Oct 11'], ['In 1 month', 'Nov 3']].map(([when, date]) => ({ when, date })),
+      newCards: [
+        ['Where is the smallest key in a BST?', 'from lesson', '#2F5D8A'],
+        ['Worst-case search time in an unbalanced BST', 'from lesson', '#2F5D8A'],
+        ['Which node replaces a deleted node with two children?', 'you missed this', '#9E3A24'],
+        ['Why sorted input makes a bad BST', 'from your explanation', '#8A6A12']
+      ].map(([front, tag, tagColor]) => ({ front, tag, tagColor })),
+
+      weak, calib, forecast
+    };
+  }
+}
+</script>
+</body>
+</html>
