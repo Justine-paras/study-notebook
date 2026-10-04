@@ -1,0 +1,90 @@
+.remember {
+  gap: 18px;
+}
+
+.remember__text {
+  margin: 0;
+  max-width: 64ch;
+  color: var(--ink-2);
+}
+
+.remember__plan {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.remember__day {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.remember__day-icon {
+  margin-bottom: var(--space-1);
+  color: var(--good);
+}
+
+.remember__when {
+  font-weight: 700;
+}
+
+.remember__date {
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+.remember__cards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.remember__cards-title {
+  font-size: var(--text-md);
+  font-weight: 700;
+}
+
+.remember__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.remember__card {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  font-size: 14px;
+}
+
+.remember__card .remember__front {
+  flex: 1;
+  min-width: 0;
+}
+
+.remember__tag {
+  flex: none;
+}
+
+.remember__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3) var(--space-4);
+}

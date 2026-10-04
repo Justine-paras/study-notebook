@@ -1,0 +1,16 @@
+.save-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+.save-status--saved {
+  color: var(--good);
+}
+
+.save-status--error {
+  color: var(--bad);
+  font-weight: 600;
+}

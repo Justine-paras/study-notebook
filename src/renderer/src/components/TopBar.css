@@ -1,0 +1,123 @@
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-topbar);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3) var(--space-5);
+  padding: var(--space-3) var(--page-gutter);
+  background: var(--topbar-bg);
+  border-bottom: 1px solid var(--line);
+  backdrop-filter: blur(6px);
+}
+
+.topbar__brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--control-md);
+  color: var(--ink);
+  text-decoration: none;
+  border-radius: var(--radius-md);
+}
+
+.topbar__brand:hover {
+  color: var(--ink);
+}
+
+.topbar__brand-name {
+  font-family: var(--font-display);
+  font-size: 25px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.topbar__nav .segmented__option {
+  min-height: 38px;
+  font-size: 14px;
+}
+
+.topbar__spacer {
+  flex: 1 1 0;
+}
+
+.topbar__streak {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 14px;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+.topbar__streak strong {
+  color: var(--ink);
+}
+
+.topbar__streak-icon {
+  color: var(--accent-hand);
+}
+
+/* Pomodoro widget */
+.pomodoro {
+  --pomo-color: var(--pomo-focus);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 6px 5px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.pomodoro--break {
+  --pomo-color: var(--pomo-break);
+}
+
+.pomodoro__readout {
+  display: flex;
+  flex-direction: column;
+  min-width: 58px;
+  line-height: 1.15;
+}
+
+.pomodoro__label {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.pomodoro__time {
+  font-size: 21px;
+  font-weight: 600;
+}
+
+.pomodoro__bar {
+  width: 64px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--line-2);
+  overflow: hidden;
+}
+
+.pomodoro__bar-fill {
+  height: 100%;
+  background: var(--pomo-color);
+  transition: width var(--dur-slow) linear;
+}
+
+/* At the narrowest window the bar and streak make way for the timer itself. */
+@media (max-width: 1080px) {
+  .pomodoro__bar {
+    display: none;
+  }
+}
+
+@media (max-width: 1000px) {
+  .topbar__streak {
+    display: none;
+  }
+}

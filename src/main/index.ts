@@ -9,6 +9,9 @@ import { registerIpc } from './ipc'
 import { getAiConfig, getThemePreference } from './services/settings'
 
 app.setName('Study Notebook')
+// A custom data folder (e2e tests, portable runs) also holds Chromium's own storage,
+// so the renderer's localStorage (Pomodoro, drafts) never leaks between runs.
+if (process.env.STUDY_DATA_DIR) app.setPath('userData', join(process.env.STUDY_DATA_DIR, 'chromium'))
 if (process.platform === 'win32') app.setAppUserModelId('com.justineparas.studynotebook')
 
 let mainWindow: BrowserWindow | null = null

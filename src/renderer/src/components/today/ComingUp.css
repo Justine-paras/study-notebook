@@ -1,0 +1,71 @@
+.coming-up__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.coming-up__exam {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line-2);
+}
+
+.coming-up__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.coming-up__name {
+  min-width: 0;
+  font-weight: 700;
+  color: var(--ink);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.coming-up__name:hover {
+  color: var(--ink);
+  text-decoration: underline;
+}
+
+.coming-up__days {
+  flex: none;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--notebook-ink);
+}
+
+.coming-up__days--later {
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.coming-up__meta {
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.coming-up__readiness {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.coming-up__ready {
+  flex: none;
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.coming-up__note,
+.coming-up__more {
+  font-size: var(--text-sm);
+  color: var(--muted);
+}

@@ -1,0 +1,94 @@
+.grades {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.grades:focus {
+  outline: none;
+}
+
+.grades__label {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.grades__buttons {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.grades__button {
+  --grade-color: var(--line-strong);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 60px;
+  padding: var(--space-2) var(--space-2);
+  border: 1.5px solid var(--grade-color);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--ink);
+  line-height: 1.2;
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease);
+}
+
+.grades__button:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+
+.grades__button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.grades__button[aria-busy='true'] {
+  opacity: 1;
+  background: var(--surface-2);
+}
+
+.grades__button--bad {
+  --grade-color: var(--bad);
+}
+
+.grades__button--caution {
+  --grade-color: var(--caution);
+}
+
+.grades__button--info {
+  --grade-color: var(--info);
+}
+
+.grades__button--good {
+  --grade-color: var(--good);
+}
+
+.grades__name {
+  font-weight: 700;
+}
+
+.grades__interval {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+  text-align: center;
+}
+
+.grades__key {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  min-width: 18px;
+  height: 18px;
+  font-size: 10px;
+}
+
+.grades__note {
+  color: var(--muted);
+  font-size: var(--text-xs);
+}

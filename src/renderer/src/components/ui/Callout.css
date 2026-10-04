@@ -1,0 +1,70 @@
+.callout {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font-size: var(--text-base);
+  line-height: 1.5;
+  min-width: 0;
+}
+
+.callout__icon {
+  display: inline-flex;
+  margin-top: 2px;
+}
+
+.callout__content {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
+
+.callout__title {
+  font-weight: 700;
+}
+
+.callout--neutral {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+.callout--info {
+  background: var(--info-bg);
+  color: var(--info-ink);
+}
+
+.callout--good {
+  background: var(--good-bg);
+  color: var(--good-ink);
+}
+
+.callout--bad {
+  background: var(--bad-bg);
+  color: var(--bad-ink);
+}
+
+.callout--warn {
+  background: var(--warn-bg);
+  color: var(--warn-ink);
+}
+
+.callout--outline {
+  gap: 10px;
+  padding: var(--space-4) 18px;
+  border: 1.5px solid var(--ink);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.callout--highlight {
+  padding: var(--space-4) 18px;
+  border-color: var(--line);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--highlight) 35%, var(--surface));
+  color: var(--ink);
+}

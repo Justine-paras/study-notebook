@@ -1,0 +1,58 @@
+.study-time {
+  gap: var(--space-4);
+}
+
+.study-time__stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-6);
+}
+
+.study-time__stats > * {
+  flex: 0 1 auto;
+}
+
+.subject-time__list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.subject-time__row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.subject-time__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: 14px;
+}
+
+.subject-time__name {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.subject-time__dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--notebook);
+}
+
+.subject-time__minutes {
+  flex: none;
+  color: var(--ink-2);
+}

@@ -1,0 +1,5 @@
+/* The back link sits close to the cover it belongs to. */
+.notebook-screen__back {
+  align-self: flex-start;
+  margin-bottom: calc(-1 * var(--space-3));
+}

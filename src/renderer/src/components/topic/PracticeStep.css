@@ -1,0 +1,11 @@
+.practice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.practice__intro {
+  margin: 0;
+  max-width: 64ch;
+  color: var(--ink-2);
+}

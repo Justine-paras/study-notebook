@@ -1,0 +1,16 @@
+.review-summary__stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.review-summary__text {
+  margin: 0;
+  color: var(--ink-2);
+}
+
+.review-summary__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}

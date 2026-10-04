@@ -1,0 +1,46 @@
+.weak-topics__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.weak-topics__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) 14px;
+  padding: 14px 22px;
+  border-top: 1px solid var(--line-2);
+}
+
+.weak-topics__text {
+  flex: 1 1 220px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.weak-topics__title {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.weak-topics__meta {
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+
+.weak-topics__bar {
+  flex: 1 1 160px;
+}
+
+.weak-topics__empty {
+  border-top: 1px solid var(--line-2);
+}
+
+.weak-topics__more {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-2);
+  border-top: 1px solid var(--line-2);
+}

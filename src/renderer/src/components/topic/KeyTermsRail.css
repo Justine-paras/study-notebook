@@ -1,0 +1,27 @@
+.key-terms__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.key-terms__chip {
+  min-height: var(--control-sm);
+  padding: var(--space-1) var(--space-3);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--highlight);
+  color: var(--highlight-ink);
+  font-size: var(--text-sm);
+  line-height: 1.3;
+  text-align: left;
+  cursor: help;
+}
+
+.key-terms__empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}

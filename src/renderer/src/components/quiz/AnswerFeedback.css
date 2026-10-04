@@ -1,0 +1,15 @@
+.answer-feedback .answer-feedback__md {
+  color: inherit;
+}
+
+.answer-feedback__source {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: var(--text-xs);
+}
+
+.answer-feedback__source svg {
+  flex: none;
+  margin-top: 2px;
+}

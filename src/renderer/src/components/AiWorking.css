@@ -1,0 +1,89 @@
+.ai-working {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: var(--space-5) 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  background: var(--surface);
+}
+
+.ai-working--compact {
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+}
+
+.ai-working__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.ai-working__title {
+  flex: 1;
+  min-width: 0;
+  font-weight: 700;
+  font-size: var(--text-md);
+}
+
+.ai-working--compact .ai-working__title {
+  font-size: var(--text-base);
+}
+
+.ai-working__elapsed {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.ai-working__message {
+  font-size: var(--text-sm);
+  color: var(--ink-2);
+  min-height: 1.5em;
+}
+
+.ai-working__explanation {
+  font-size: var(--text-sm);
+  color: var(--muted);
+  max-width: 70ch;
+}
+
+.ai-working__note {
+  margin-top: -2px;
+}
+
+.ai-working__indeterminate {
+  position: relative;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--line-2);
+  overflow: hidden;
+}
+
+.ai-working__indeterminate span {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 35%;
+  border-radius: inherit;
+  background: var(--ink);
+  animation: ai-working-slide 1.6s var(--ease) infinite;
+}
+
+@keyframes ai-working-slide {
+  from {
+    left: -35%;
+  }
+  to {
+    left: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-working__indeterminate span {
+    left: 0;
+    width: 100%;
+    opacity: 0.35;
+  }
+}
