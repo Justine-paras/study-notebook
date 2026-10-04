@@ -17,6 +17,7 @@ import {
   type TopicWithProgress
 } from '@shared/types'
 import type { CreateQuizInput, SyllabusResult } from '@shared/api'
+import { MOCK_EXAM_MINUTES as PLAN_MOCK_EXAM_MINUTES } from '@shared/learning'
 import {
   PATH_STEP_LABELS,
   SOURCE_KIND_LABELS,
@@ -196,7 +197,8 @@ export function isValidDateKey(value: string): boolean {
 // Mock exams
 // ---------------------------------------------------------------------------
 
-export const MOCK_EXAM_DEFAULTS = { count: 30, timeLimitMin: 60 } as const
+// The default time limit is also the length Today's plan budgets for a mock exam.
+export const MOCK_EXAM_DEFAULTS = { count: 30, timeLimitMin: PLAN_MOCK_EXAM_MINUTES } as const
 export const MOCK_EXAM_COUNTS = [10, 20, 30, 40] as const
 export const MOCK_EXAM_MINUTES = [30, 45, 60, 90] as const
 

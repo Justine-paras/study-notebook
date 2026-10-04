@@ -18,6 +18,16 @@ const RESERVED_WINDOWS_NAMES = /^(con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³])
 const MAX_NAME_LENGTH = 120
 const MAX_COPY_ATTEMPTS = 1000
 
+const MB = 1024 * 1024
+/**
+ * Largest file the app imports. The extractors read a file whole into the
+ * main process's memory (pdfjs keeps a second copy), so a multi-gigabyte
+ * file could crash the app; 200 MB covers big image-heavy textbooks and decks.
+ */
+export const MAX_IMPORT_BYTES = 200 * MB
+/** Text and Markdown become JS strings that are copied while tidying: 20 MB is already thousands of pages. */
+export const MAX_TEXT_IMPORT_BYTES = 20 * MB
+
 /**
  * Makes a file name safe on Windows (and everywhere else): removes
  * characters Windows forbids and control characters, trailing dots and
@@ -68,6 +78,41 @@ function errorCode(err: unknown): string | undefined {
   return (err as NodeJS.ErrnoException | null)?.code
 }
 
+function formatSize(bytes: number): string {
+  // Rounded up, so a file just over the limit never reads as "200 MB" next to a 200 MB limit.
+  return `${Math.ceil(bytes / MB)} MB`
+}
+
+/** Throws SOURCE_TOO_LARGE when a file of this name and size is over the import cap for its type. */
+export function checkImportSize(fileName: string, sizeBytes: number): void {
+  const isText = /\.(txt|md)$/i.test(fileName.trim())
+  const limit = isText ? MAX_TEXT_IMPORT_BYTES : MAX_IMPORT_BYTES
+  if (sizeBytes <= limit) return
+  throw new AppError(
+    'SOURCE_TOO_LARGE',
+    `This file is ${formatSize(sizeBytes)}, and the largest ${isText ? 'text file' : 'file'} Study Notebook can add is ${formatSize(limit)}. ` +
+      'Split it into smaller files (for example one per chapter) and add those.'
+  )
+}
+
+/**
+ * Turns the file-system errors Windows users actually hit (a file open in
+ * PowerPoint, a full disk) into a sentence instead of "EBUSY: resource busy
+ * or locked, copyfile 'C:\...' -> 'C:\...'". Other errors pass through.
+ */
+export function friendlyCopyError(err: unknown): unknown {
+  switch (errorCode(err)) {
+    case 'EBUSY':
+    case 'EPERM':
+    case 'EACCES':
+      return new AppError('EXTRACT_FAILED', "The file is open in another app or you don't have permission to read it. Close it there and try again.")
+    case 'ENOSPC':
+      return new AppError('UNKNOWN', 'Your disk is full. Free up some space and try again.')
+    default:
+      return err
+  }
+}
+
 /**
  * Copies `srcPath` to `<libraryDir>/<notebookId>/<uniqueName>` keeping the
  * original file name where possible (adds " (2)", " (3)"... on collision).
@@ -78,9 +123,10 @@ export async function copyIntoLibrary(libraryDir: string, notebookId: string, sr
 
   const source = await stat(srcPath).catch((err: unknown) => {
     if (errorCode(err) === 'ENOENT') throw new AppError('NOT_FOUND', "The file couldn't be found. It may have been moved or deleted.")
-    throw err
+    throw friendlyCopyError(err)
   })
   if (!source.isFile()) throw new AppError('INVALID_INPUT', 'That is a folder, not a file.')
+  checkImportSize(basename(srcPath), source.size)
 
   await mkdir(folder, { recursive: true })
   const name = safeFileName(basename(srcPath))
@@ -95,7 +141,7 @@ export async function copyIntoLibrary(libraryDir: string, notebookId: string, sr
       if (errorCode(err) === 'EEXIST') continue
       // Don't leave a half-written copy behind (e.g. disk full).
       await rm(storedPath, { force: true }).catch(() => undefined)
-      throw err
+      throw friendlyCopyError(err)
     }
     const { size } = await stat(storedPath)
     return { storedPath, sizeBytes: size }

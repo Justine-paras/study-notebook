@@ -6,14 +6,19 @@ import type {
   BetaMessage,
   BetaMessageStreamParams,
   BetaRawMessageStreamEvent,
+  BetaRefusalStopDetails,
   BetaStopReason
 } from '@anthropic-ai/sdk/resources/beta/messages/messages'
+import type { AiModelId } from '@shared/types'
 import type { AiClient, MessageStreamLike } from './client'
+import { StudyAi } from './index'
 
 export interface ScriptedResponse {
   /** Text blocks of the final message; each block is also streamed as one text delta. */
   text?: string | string[]
   stopReason?: BetaStopReason
+  /** `stop_details` of a refusal. */
+  stopDetails?: BetaRefusalStopDetails
   /** Thrown from finalMessage(), like an SDK error. */
   error?: unknown
   /** Emit a thinking block start before the text. */
@@ -23,7 +28,7 @@ export interface ScriptedResponse {
 type TextListener = (delta: string, snapshot: string) => void
 type EventListener = (event: BetaRawMessageStreamEvent, snapshot: BetaMessage) => void
 
-export function fakeMessage(blocks: string[], stopReason: BetaStopReason = 'end_turn'): BetaMessage {
+export function fakeMessage(blocks: string[], stopReason: BetaStopReason = 'end_turn', stopDetails: BetaRefusalStopDetails | null = null): BetaMessage {
   return {
     id: 'msg_test',
     type: 'message',
@@ -32,7 +37,7 @@ export function fakeMessage(blocks: string[], stopReason: BetaStopReason = 'end_
     content: blocks.map((text) => ({ type: 'text', text, citations: null })),
     stop_reason: stopReason,
     stop_sequence: null,
-    stop_details: null,
+    stop_details: stopDetails,
     usage: { input_tokens: 10, output_tokens: 10 }
   } as unknown as BetaMessage
 }
@@ -52,7 +57,7 @@ class FakeStream implements MessageStreamLike {
   async finalMessage(): Promise<BetaMessage> {
     if (this.response.error) throw this.response.error
     const blocks = this.response.text === undefined ? [] : Array.isArray(this.response.text) ? this.response.text : [this.response.text]
-    const message = fakeMessage(blocks, this.response.stopReason)
+    const message = fakeMessage(blocks, this.response.stopReason, this.response.stopDetails ?? null)
     if (this.response.thinking) {
       const event = { type: 'content_block_start', index: 0, content_block: { type: 'thinking', thinking: '', signature: '' } }
       for (const listener of this.eventListeners) listener(event as unknown as BetaRawMessageStreamEvent, message)
@@ -109,5 +114,19 @@ export class FakeClient implements AiClient {
     if (typeof content === 'string') return content
     const last = content[content.length - 1]
     return last.type === 'text' ? last.text : ''
+  }
+}
+
+/** StudyAi wired to a FakeClient instead of the real SDK. */
+export class TestStudyAi extends StudyAi {
+  readonly client: FakeClient
+
+  constructor(responses: ScriptedResponse[], model: AiModelId = 'claude-opus-5-5', retrieveError?: unknown) {
+    super(() => ({ apiKey: 'sk-ant-test', model, demo: false }))
+    this.client = new FakeClient(responses, retrieveError)
+  }
+
+  protected override clientFor(): AiClient {
+    return this.client
   }
 }

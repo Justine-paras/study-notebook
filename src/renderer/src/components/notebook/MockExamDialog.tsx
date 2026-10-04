@@ -5,7 +5,7 @@ import { AiWorking } from '../AiWorking'
 import { ErrorNotice } from '../ErrorNotice'
 import { Button, Modal, Segmented, Select, useToast } from '../ui'
 import { formatDate, formatMinutes } from '../../lib/format'
-import { useApiMutation } from '../../lib/queries'
+import { useAiAction } from '../../lib/aiJobs'
 import { ROUTES } from '../../lib/routes'
 import { MOCK_EXAM_COUNTS, MOCK_EXAM_DEFAULTS, MOCK_EXAM_MINUTES, mockExamInput } from './model'
 import './MockExamDialog.css'
@@ -22,25 +22,34 @@ const ALL_TOPICS = ''
 
 /**
  * Lets the learner set the length and time of a mock exam, writes it with
- * the AI and opens it. The AI call outlives the dialog: closing it while the
- * exam is being written shows a toast with a link when it is ready.
+ * the AI and opens it. Writing it is an app-wide job that outlives the
+ * dialog: closing it while the exam is being written shows a toast with a
+ * link when it is ready (from here while the notebook is open, otherwise
+ * from <AiJobNotifier>), and reopening the dialog shows the same progress.
  */
 export function MockExamDialog({ open, onClose, notebookId, exams }: MockExamDialogProps) {
   const navigate = useNavigate()
   const toast = useToast()
   const openRef = useRef(open)
   openRef.current = open
-  // After the page is left, a finished exam is announced with a toast instead of navigating.
-  useEffect(
-    () => () => {
-      openRef.current = false
-    },
-    []
-  )
-  const create = useApiMutation('createQuiz', {
-    onSuccess: (quiz) => {
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
+  const create = useAiAction('createQuiz', `mock:${notebookId}`, {
+    task: 'quiz',
+    label: 'Your mock exam',
+    href: (quiz) => ROUTES.quiz(quiz.id)
+  })
+
+  // React to a job that finishes while this page is open (one that finished before is old news).
+  const job = create.job
+  const seenRef = useRef(job)
+  useEffect(() => {
+    if (!job || job === seenRef.current || job.status === 'pending') return
+    seenRef.current = job
+    if (job.status === 'success' && job.data) {
+      const quiz = job.data
       if (openRef.current) {
-        onClose()
+        onCloseRef.current()
         navigate(ROUTES.quiz(quiz.id))
         return
       }
@@ -51,13 +60,15 @@ export function MockExamDialog({ open, onClose, notebookId, exams }: MockExamDia
         duration: 0,
         action: { label: 'Open it', onClick: () => navigate(ROUTES.quiz(quiz.id)) }
       })
+    } else if (job.status === 'error' && !openRef.current) {
+      toast.error(job.error, "Your mock exam couldn't be written")
     }
-  })
+  }, [job, navigate, toast])
 
   const start = (examId: string, count: number, minutes: number) => {
     if (create.isPending) return
     const exam = exams.find((e) => e.id === examId) ?? null
-    create.mutate([mockExamInput(notebookId, exam, count, minutes)])
+    create.run(mockExamInput(notebookId, exam, count, minutes))
   }
 
   if (!open) return null
@@ -65,10 +76,12 @@ export function MockExamDialog({ open, onClose, notebookId, exams }: MockExamDia
     <MockExamForm
       exams={exams}
       pending={create.isPending}
+      startedAt={create.job?.startedAt}
+      notebookId={notebookId}
       error={create.error}
       onStart={start}
       onClose={() => {
-        if (!create.isPending) create.reset()
+        if (!create.isPending) create.dismiss()
         onClose()
       }}
     />
@@ -78,12 +91,14 @@ export function MockExamDialog({ open, onClose, notebookId, exams }: MockExamDia
 interface MockExamFormProps {
   exams: readonly Exam[]
   pending: boolean
+  startedAt?: number
+  notebookId: ID
   error: unknown
   onStart: (examId: string, count: number, minutes: number) => void
   onClose: () => void
 }
 
-function MockExamForm({ exams, pending, error, onStart, onClose }: MockExamFormProps) {
+function MockExamForm({ exams, pending, startedAt, notebookId, error, onStart, onClose }: MockExamFormProps) {
   const [examId, setExamId] = useState(exams[0]?.id ?? ALL_TOPICS)
   const [count, setCount] = useState<string>(String(MOCK_EXAM_DEFAULTS.count))
   const [minutes, setMinutes] = useState<string>(String(MOCK_EXAM_DEFAULTS.timeLimitMin))
@@ -138,7 +153,7 @@ function MockExamForm({ exams, pending, error, onStart, onClose }: MockExamFormP
           />
         </div>
       </fieldset>
-      {pending && <AiWorking task="quiz" title="Writing your mock exam" />}
+      {pending && <AiWorking task="quiz" title="Writing your mock exam" startedAt={startedAt} subjectId={notebookId} />}
       <ErrorNotice error={error} title="Couldn't write the mock exam" onRetry={() => onStart(examId, Number(count), Number(minutes))} />
     </Modal>
   )

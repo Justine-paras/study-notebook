@@ -200,9 +200,6 @@ them to `api[method]`:
 const rename = useApiMutation('updateNotebook', { onSuccess: () => toast.success('Renamed') })
 rename.mutate([notebook.id, { name }])
 
-const generate = useApiMutation('generateLesson')
-const lesson = await generate.mutateAsync([topicId, { regenerate: true }])
-
 const pick = useApiMutation('pickFiles')
 pick.mutate([])   // no-argument methods take an empty tuple
 ```
@@ -217,6 +214,37 @@ pick.mutate([])   // no-argument methods take an empty tuple
 - All other `useMutation` options (`onSuccess`, `onError`, `onSettled`,
   `onMutate`) work as usual. Errors are not toasted automatically: show
   `<ErrorNotice error={m.error} />` inline or call `toast.error(err)`.
+- `refetchAfterMutation(queryClient, target)` is the awaitable version of the
+  invalidation: it resolves once the active queries have their new data and
+  never rejects.
+
+### AI calls: `useAiAction(method, key, options)` (lib/aiJobs.ts)
+
+Every AI call (lesson, quiz, mock exam, syllabus, summary, explanation
+feedback, finishTopic) is an app-wide job, never a `useApiMutation`: it takes
+30-120 s with the real API and must survive leaving the page.
+
+```tsx
+const lesson = useAiAction('generateLesson', `lesson:${topic.id}`, { task: 'lesson', label: `Lesson on ${topic.title}`, href: ROUTES.topic(topic.id) })
+lesson.run(topic.id)                       // never throws; runAsync returns the result
+{lesson.isPending && <AiWorking task="lesson" startedAt={lesson.job?.startedAt} subjectId={topic.id} />}
+<ErrorNotice error={lesson.error} onRetry={lesson.retry} onDismiss={lesson.dismiss} addFilesTo={ROUTES.notebook(topic.notebookId)} />
+```
+
+- One job per `key`: a second start while it runs joins the running call.
+  The result (`data`) or `error` stays until retried or dismissed.
+- `onSuccess` runs even after the screen was left: persist results there.
+  The job reads as done only after the screens refetched (`invalidate`,
+  default all), so the old view can't flash.
+- `<AiJobNotifier>` (mounted once in App) toasts jobs that finish while no
+  mounted screen watches their key; `announceSuccess: false` when the caller
+  shows its own success toast. The top bar shows running jobs with a clock.
+
+### Day change (lib/useDayRollover.ts)
+
+`useDayRollover()` (called once in the App layout) refetches everything when
+the local date changes (checked every minute, on focus and on visibility),
+so Today's plan, due counts and the streak belong to the new day.
 
 ### Theme (lib/theme.tsx)
 
@@ -250,7 +278,7 @@ const { preference, setPreference } = useTheme()
 
 ### AI progress (lib/aiProgress.ts)
 
-`useAiProgress(task?)` -> latest `AiProgressEvent` (`{ jobId, task, progress: 0-1 | null, message }`) since the component mounted, or `null`. `<AiWorking>` already uses it; you rarely need it directly.
+`useAiProgress(task?, since?, subjectId?)` -> latest `AiProgressEvent` (`{ jobId, task, subjectId, progress: 0-1 | null, message }`) received since `since` (default: mount), or `null`. With `subjectId` (topic, file or notebook id) another job of the same task is ignored. `<AiWorking>` already uses it; you rarely need it directly.
 
 ### Keyboard (lib/useHotkeys.ts)
 
@@ -344,8 +372,9 @@ Providers (`AppProviders` in App.tsx, outermost first): `QueryClientProvider`,
 | `MasteryPill` | `state`, `mastery?` (adds "· 40% mastery"), `size` | `<MasteryPill state={t.progress.state} />` |
 | `MasteryBar` | `state`, `mastery`, **`label`**, `size`, `showValue` | `<MasteryBar state={p.state} mastery={p.mastery} label={`Mastery of ${t.title}`} />` |
 | `MasteryLegend` | none | `<MasteryLegend />` |
-| `AiWorking` | `task` (AiTask), `title?`, `explanation?`, `compact` | `{generate.isPending && <AiWorking task="lesson" />}` |
-| `ErrorNotice` | `error` (renders nothing when null), `onRetry`, `title`, `compact` | `<ErrorNotice error={generate.error} onRetry={() => generate.mutate([topicId])} />` |
+| `AiWorking` | `task` (AiTask), `title?`, `explanation?`, `compact`, `startedAt?` (job start, keeps the clock right after a remount), `subjectId?` | `{lesson.isPending && <AiWorking task="lesson" startedAt={lesson.job?.startedAt} subjectId={topic.id} />}` |
+| `ErrorNotice` | `error` (renders nothing when null), `onRetry`, `onDismiss`, `addFilesTo` (route shown as "Add files" for NO_SOURCES), `title`, `compact` | `<ErrorNotice error={lesson.error} onRetry={lesson.retry} onDismiss={lesson.dismiss} />` |
+| `AiJobNotifier` | none (rendered once by App) | toasts AI jobs that finish off screen |
 | `TopBar` | none (rendered by App) | brand, nav, streak, Pomodoro, Settings |
 
 Markdown details: GFM (tables in a horizontal scroll box, task lists,

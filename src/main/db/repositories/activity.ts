@@ -22,9 +22,17 @@ export function lastStudiedByNotebook(db: DatabaseSync): Map<ID, string> {
   return result
 }
 
-/** Start times of every focus session since `sinceIso` (both kinds count as studying). */
-export function focusTimestampsSince(db: DatabaseSync, sinceIso: string): string[] {
-  return prepare(db, "SELECT started_at FROM focus_sessions WHERE started_at >= ? AND kind = 'focus'")
-    .all(sinceIso)
-    .map((row) => str(row, 'started_at'))
+/**
+ * True when the learner answered a question, reviewed a card or finished a
+ * focus session (breaks don't count) in [fromIso, toIso). Three index probes,
+ * so the streak can walk back day by day without loading any history.
+ */
+export function hasStudyActivityBetween(db: DatabaseSync, fromIso: string, toIso: string): boolean {
+  const row = prepare(
+    db,
+    `SELECT EXISTS (SELECT 1 FROM answers WHERE answered_at >= ?1 AND answered_at < ?2)
+         OR EXISTS (SELECT 1 FROM review_logs WHERE reviewed_at >= ?1 AND reviewed_at < ?2)
+         OR EXISTS (SELECT 1 FROM focus_sessions WHERE kind = 'focus' AND started_at >= ?1 AND started_at < ?2) AS active`
+  ).get(fromIso, toIso)
+  return row ? Number(row.active) === 1 : false
 }

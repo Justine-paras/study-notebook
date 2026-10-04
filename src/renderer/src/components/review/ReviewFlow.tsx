@@ -74,12 +74,23 @@ export function ReviewFlow({
 
   // Grades skip cache invalidation (the queue on screen is a snapshot); refresh everything once at the end.
   const finishedRef = useRef(false)
+  const gradedRef = useRef(0)
   useEffect(() => {
     if (!done || finishedRef.current) return
     finishedRef.current = true
     void queryClient.invalidateQueries()
     onDone?.(summarizeReview(state.log))
   }, [done, onDone, queryClient, state.log])
+
+  // Leaving mid-review must refresh too: review queues are cached without
+  // expiry, so coming back would otherwise show the graded cards again (and
+  // Today, the notebook and Insights would keep the old due counts).
+  useEffect(
+    () => () => {
+      if (gradedRef.current > 0 && !finishedRef.current) void queryClient.invalidateQueries()
+    },
+    [queryClient]
+  )
 
   // A new card puts focus on its question, so screen readers read it and 1-3 work right away.
   useEffect(() => {
@@ -108,6 +119,7 @@ export function ReviewFlow({
       setError(null)
       try {
         const updated = await api.reviewCard({ cardId: card.id, rating, confidence: state.confidence, response: state.response.trim() })
+        gradedRef.current += 1
         let requeue: ReviewCard | null = null
         if (shouldRequeue(rating, updated, Date.now())) {
           // Fresh previews for the second look; the old ones describe the card before this grade.

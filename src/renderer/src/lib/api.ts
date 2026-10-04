@@ -23,6 +23,16 @@ export const NON_RETRYABLE_CODES: ReadonlySet<string> = new Set<AppErrorCode | t
   'INVALID_INPUT'
 ])
 
+/**
+ * Codes whose message from the main process is written for the learner and
+ * says more than the generic text: which safety area a refusal touched, that
+ * the files fill the model's context window, which input was not valid
+ * ("Add topics to this notebook before making a quiz."). For these the
+ * message becomes the friendly text; other codes keep the generic text and
+ * show the message only under Details.
+ */
+export const SPECIFIC_MESSAGE_CODES: ReadonlySet<string> = new Set<AppErrorCode>(['AI_REFUSED', 'SOURCE_TOO_LARGE', 'INVALID_INPUT'])
+
 /** Codes that are fixed in Settings (ErrorNotice shows a Settings button). */
 export const SETTINGS_ERROR_CODES: ReadonlySet<string> = new Set<AppErrorCode>(['NO_API_KEY', 'INVALID_API_KEY'])
 
@@ -110,7 +120,9 @@ async function call(method: StudyApiMethod, args: unknown[]): Promise<unknown> {
     throw new ApiError('UNKNOWN', `Malformed response from "${method}"`, method)
   }
   if (result.ok) return result.data
-  throw new ApiError(result.error.code, result.error.message, method)
+  const { code, message } = result.error
+  const specific = SPECIFIC_MESSAGE_CODES.has(code) && typeof message === 'string' && message.trim() ? message : undefined
+  throw new ApiError(code, message, method, specific)
 }
 
 function buildApi(): StudyApi {

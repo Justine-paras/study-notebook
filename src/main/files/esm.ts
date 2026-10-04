@@ -12,6 +12,7 @@
 // Verified against the real build: out/main/index.js contains
 // `import(specifier)` and `createRequire(require("url").pathToFileURL(__filename).href)`.
 
+import { existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -23,9 +24,27 @@ const nativeImport = (specifier: string): Promise<unknown> => import(/* @vite-ig
 // file, so both find the project's node_modules.
 const requireFromHere = createRequire(import.meta.url)
 
+// ...\resources\app.asar\node_modules\... -> ...\resources\app.asar.unpacked\node_modules\...
+const ASAR_SEGMENT = /\.asar(?=[\\/])/
+
+/**
+ * In a packaged app, require.resolve answers with paths inside app.asar.
+ * Electron 44 can import and read those (checked, unpacked entries included),
+ * but packages listed under asarUnpack (electron-builder.yml) are used from
+ * their real copy in app.asar.unpacked so pdfjs, which reads its data files
+ * through process.getBuiltinModule('fs'), never depends on Electron's asar
+ * patches. Paths outside an archive, or files that were not unpacked, are
+ * returned as is.
+ */
+export function unpackedPath(path: string, exists: (path: string) => boolean = existsSync): string {
+  if (!ASAR_SEGMENT.test(path)) return path
+  const unpacked = path.replace(ASAR_SEGMENT, '.asar.unpacked')
+  return exists(unpacked) ? unpacked : path
+}
+
 /** Absolute path of a file inside an installed package, e.g. resolvePackageFile('pdfjs-dist/legacy/build/pdf.mjs'). */
 export function resolvePackageFile(specifier: string): string {
-  return requireFromHere.resolve(specifier)
+  return unpackedPath(requireFromHere.resolve(specifier))
 }
 
 /** Absolute directory of an installed package. */

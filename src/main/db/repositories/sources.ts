@@ -124,3 +124,16 @@ export function countSourcesByNotebook(db: DatabaseSync): Map<ID, number> {
   }
   return counts
 }
+
+export const INTERRUPTED_IMPORT_ERROR = 'The app closed before this file finished importing. Delete it and add it again.'
+
+/**
+ * Marks sources left 'processing' by an import the app never finished (it was
+ * closed or crashed mid-extraction) as failed, so they don't show a spinner
+ * forever. Only call while no import can be running, i.e. at startup.
+ */
+export function failInterruptedImports(db: DatabaseSync): number {
+  return Number(
+    prepare(db, "UPDATE sources SET status = 'error', error = ? WHERE status = 'processing'").run(INTERRUPTED_IMPORT_ERROR).changes
+  )
+}

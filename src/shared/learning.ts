@@ -317,6 +317,18 @@ export function newCardSchedule(now: Date): CardSchedule {
 }
 
 /**
+ * True when a review with this rating counts as recalled (a correct answer):
+ * everything except Again. Hard means "recalled, with effort": FSRS treats it
+ * as a successful recall, the desired retention it schedules for is defined
+ * the same way, and the approved design counts it as recalled in the session
+ * summary. The answer log, the recall rate and topic mastery all use this one
+ * rule, so a Hard review never counts as right in one place and wrong in another.
+ */
+export function isRecalledRating(rating: Rating): boolean {
+  return rating >= 2
+}
+
+/**
  * Confidence-aware rating: a "Good"/"Easy" given while guessing is treated as
  * "Hard" (the memory is not reliable yet). Other combinations are unchanged.
  */
@@ -453,10 +465,13 @@ function ranksBefore(
 // Topic mastery
 // ---------------------------------------------------------------------------
 
+/** The parts of an answer record that mastery reads (no question text, so callers can load them cheaply). */
+export type ProgressAnswer = Pick<AnswerRecord, 'id' | 'source' | 'cardId' | 'correct' | 'confidence' | 'answeredAt'>
+
 export interface TopicProgressInput {
   topic: Topic
   /** All answer records for this topic (any age, any order). */
-  answers: AnswerRecord[]
+  answers: ProgressAnswer[]
   /** All non-suspended cards for this topic. */
   cards: Card[]
   /** Review logs for those cards. */
@@ -473,6 +488,8 @@ const OVERCONFIDENT_WINDOW_DAYS = 30
 const WEAK_OVERCONFIDENT = 2
 const MASTERED_MIN = 85
 const MASTERED_REVIEW_SPAN_DAYS = 3
+/** Recent accuracy at which overconfident errors count as fixed (the mastered bar). */
+const OVERCONFIDENT_RESOLVED_ACCURACY = MASTERED_MIN / 100
 
 const PATH_PROGRESS: Record<PathStep | 'done', number> = {
   warmup: 0,
@@ -492,15 +509,18 @@ interface DataPoint {
 /**
  * Mastery model (document the exact formula in a comment):
  * - Accuracy: recency-weighted accuracy over the last 20 answers + reviews
- *   (reviews count as correct when rating >= 3). Needs >= 3 data points.
+ *   (a review counts as correct unless rated Again, see isRecalledRating).
+ *   Needs >= 3 data points.
  * - Memory: mean retrievability of the topic's reviewed cards.
  * - mastery = round(100 * (0.5 * accuracy + 0.4 * memory + 0.1 * pathDone)), using
  *   whichever parts exist (re-weighted), 0 when the topic has no data.
  * States:
  * - not_started: pathStep null and no answers and no cards.
  * - learning: pathStep set and not 'done'.
- * - weak: (>= 4 data points and accuracy < 0.6) or overconfident errors in the last 30 days >= 2.
- * - mastered: mastery >= 85 and at least 2 successful reviews on different days >= 3 days apart.
+ * - weak: (>= 4 data points and accuracy < 0.6), or >= 2 overconfident errors
+ *   in the last 30 days that recent accuracy has not yet made up for
+ *   (accuracy below 0.85, or too few points to tell).
+ * - mastered: mastery >= 85 and at least 2 recalled reviews on local days >= 3 days apart.
  * - learning (again): pathStep null but answers or cards exist (e.g. only a mock exam touched it).
  * - reviewing: everything else.
  *
@@ -530,13 +550,13 @@ export function computeTopicProgress(input: TopicProgressInput): TopicProgress {
   const cards = input.cards.filter((c) => !c.suspended)
 
   const reviewKeys = new Set(input.reviews.map((r) => `${r.cardId}|${parseTime(r.reviewedAt)}`))
-  const isLoggedReview = (a: AnswerRecord): boolean =>
+  const isLoggedReview = (a: ProgressAnswer): boolean =>
     a.source === 'review' && a.cardId !== null && reviewKeys.has(`${a.cardId}|${parseTime(a.answeredAt)}`)
   const scoredAnswers = input.answers.filter((a) => a.source !== 'warmup' && !isLoggedReview(a))
 
   const points: DataPoint[] = [
     ...scoredAnswers.map((a) => ({ at: parseTime(a.answeredAt) ?? 0, id: a.id, correct: a.correct })),
-    ...input.reviews.map((r) => ({ at: parseTime(r.reviewedAt) ?? 0, id: r.id, correct: r.rating >= 3 }))
+    ...input.reviews.map((r) => ({ at: parseTime(r.reviewedAt) ?? 0, id: r.id, correct: isRecalledRating(r.rating) }))
   ].sort((a, b) => b.at - a.at || a.id.localeCompare(b.id))
 
   let accuracy: number | null = null
@@ -587,26 +607,39 @@ export function computeTopicProgress(input: TopicProgressInput): TopicProgress {
   const overconfidentReviews = input.reviews.filter(
     (r) =>
       r.confidence === 'sure' &&
-      r.rating === 1 &&
+      !isRecalledRating(r.rating) &&
       inWindow(r.reviewedAt) &&
       !countedReviewKeys.has(`${r.cardId}|${parseTime(r.reviewedAt)}`)
   )
   const overconfidentCount = overconfidentAnswers.length + overconfidentReviews.length
 
-  const successfulReviewDays = input.reviews
-    .filter((r) => r.rating >= 3)
-    .map((r) => parseTime(r.reviewedAt))
-    .filter((t): t is number => t !== null)
-    .map((t) => localDate(new Date(t)))
-    .sort()
+  // Local dates only move forward with time, so the first and last recalled
+  // reviews give the span without converting every review to a date.
+  let firstRecalled = Number.POSITIVE_INFINITY
+  let lastRecalled = Number.NEGATIVE_INFINITY
+  let recalledReviews = 0
+  for (const r of input.reviews) {
+    const t = isRecalledRating(r.rating) ? parseTime(r.reviewedAt) : null
+    if (t === null) continue
+    recalledReviews += 1
+    firstRecalled = Math.min(firstRecalled, t)
+    lastRecalled = Math.max(lastRecalled, t)
+  }
   const provenOverTime =
-    successfulReviewDays.length >= 2 &&
-    daysBetween(successfulReviewDays[0], successfulReviewDays[successfulReviewDays.length - 1]) >= MASTERED_REVIEW_SPAN_DAYS
+    recalledReviews >= 2 &&
+    daysBetween(localDate(new Date(firstRecalled)), localDate(new Date(lastRecalled))) >= MASTERED_REVIEW_SPAN_DAYS
+
+  // Overconfident errors flag a topic until the learner has shown, by answering
+  // well since, that the misconception is fixed. Without this a topic answered
+  // right ten times in a row stayed "weak" (and in Today's weak spots, "you
+  // keep missing these") for the rest of the 30-day window.
+  const overconfidentUnresolved =
+    overconfidentCount >= WEAK_OVERCONFIDENT && (accuracy === null || accuracy < OVERCONFIDENT_RESOLVED_ACCURACY)
 
   let state: TopicProgress['state']
   if (topic.pathStep === null && input.answers.length === 0 && cards.length === 0) state = 'not_started'
   else if (topic.pathStep !== null && topic.pathStep !== 'done') state = 'learning'
-  else if ((points.length >= WEAK_MIN_POINTS && accuracy !== null && accuracy < WEAK_ACCURACY) || overconfidentCount >= WEAK_OVERCONFIDENT)
+  else if ((points.length >= WEAK_MIN_POINTS && accuracy !== null && accuracy < WEAK_ACCURACY) || overconfidentUnresolved)
     state = 'weak'
   else if (mastery >= MASTERED_MIN && provenOverTime) state = 'mastered'
   // Quiz or mock-exam answers (or hand-made cards) on a topic whose path was never
@@ -723,11 +756,26 @@ export interface TodayPlanInput {
 }
 
 const REVIEW_SECONDS_PER_CARD = 40
-const WEAK_MINUTES_PER_TOPIC = 5
+const QUIZ_SECONDS_PER_QUESTION = 60
 const WEAK_TOPICS_MAX = 3
 const LEARN_MINUTES_PER_TOPIC = 20
-const MOCK_EXAM_MINUTES = 30
 const MOCK_EXAM_WITHIN_DAYS = 3
+
+/**
+ * Today's session asks this many weak-spot questions in all, as one quiz per
+ * notebook (a quiz belongs to one notebook) of at least WEAK_SPOT_MIN_PER_QUIZ.
+ * The plan estimates the weak block from the same numbers.
+ */
+export const WEAK_SPOT_QUESTIONS = 8
+export const WEAK_SPOT_MIN_PER_QUIZ = 4
+/** Length of a mock exam: the plan's estimate and the default time limit. */
+export const MOCK_EXAM_MINUTES = 60
+
+/** Questions in each weak-spot quiz when the weak topics come from `notebookCount` notebooks. */
+export function weakSpotQuizSize(notebookCount: number): number {
+  if (notebookCount <= 1) return WEAK_SPOT_QUESTIONS
+  return Math.max(WEAK_SPOT_MIN_PER_QUIZ, Math.ceil(WEAK_SPOT_QUESTIONS / notebookCount))
+}
 
 const STEP_LABELS: Record<PathStep, string> = {
   warmup: 'Warm-up',
@@ -775,11 +823,12 @@ function wholeCount(n: number): number {
  * 1. review: due cards, most overdue first, capped at maxReviewsPerDay, interleaved
  *    across notebooks. ~40 s per card. Reason mentions they are about to be forgotten.
  * 2. weak: up to 3 weak topics, prioritising topics covered by the nearest exam,
- *    then lowest mastery. ~5 min per topic. Reason mentions repeated misses / exam.
+ *    then lowest mastery. ~1 min per question of the session's weak-spot
+ *    quizzes (see weakSpotQuizSize). Reason mentions repeated misses / exam.
  * 3. learn: up to newTopicsPerDay topics, preferring 'learning' topics (finish
  *    what you started), then not-started topics covered by the nearest exam in
  *    course order, then course order. ~20 min per topic.
- * 4. exam_prep: when an exam is within 3 days, a mock-exam block for it (~30 min).
+ * 4. exam_prep: when an exam is within 3 days, a mock-exam block for it (MOCK_EXAM_MINUTES).
  * Reasons are short, concrete and written to the learner ("you keep missing these,
  * and 2 are on your Oct 12 midterm").
  *
@@ -843,15 +892,18 @@ export function buildTodayPlan(input: TodayPlanInput): TodayPlan {
     )
     .slice(0, WEAK_TOPICS_MAX)
   if (weak.length > 0) {
+    const notebookIds = unique(weak.map((t) => t.notebookId))
+    const questions = weakSpotQuizSize(notebookIds.length) * notebookIds.length
     blocks.push({
       kind: 'weak',
       title: `Fix ${plural(weak.length, 'weak spot')}`,
       detail: weak.map((t) => t.title).join(' · '),
       reason: weakBlockReason(weak, examByTopic, currentYear),
-      estMinutes: weak.length * WEAK_MINUTES_PER_TOPIC,
+      // The session runs these as weak-spot quizzes, so the estimate follows their size, not the topic count.
+      estMinutes: Math.ceil((questions * QUIZ_SECONDS_PER_QUESTION) / 60),
       cardIds: [],
       topicIds: weak.map((t) => t.id),
-      notebookIds: unique(weak.map((t) => t.notebookId))
+      notebookIds
     })
   }
 

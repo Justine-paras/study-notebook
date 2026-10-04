@@ -80,10 +80,13 @@ function ModalDialog({
   onCloseRef.current = onClose
   const dismissibleRef = useRef(dismissible)
   dismissibleRef.current = dismissible
+  // Set while this component closes the dialog itself (unmount), so the native "close" event is ignored.
+  const closingRef = useRef(false)
 
   useLayoutEffect(() => {
     const dialog = dialogRef.current
     if (!dialog) return
+    closingRef.current = false
     const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null
     if (!dialog.open) dialog.showModal()
     const body = dialog.querySelector<HTMLElement>('.modal__body')
@@ -95,6 +98,7 @@ function ModalDialog({
       dialog
     target.focus()
     return () => {
+      closingRef.current = true
       if (dialog.open) dialog.close()
       // Return focus to whatever opened the dialog, if it is still on the page.
       if (previouslyFocused?.isConnected) previouslyFocused.focus()
@@ -107,11 +111,26 @@ function ModalDialog({
     if (!dialog) return
     // Esc fires "cancel"; the dialog stays open until the parent closes it (controlled).
     const onCancel = (event: Event) => {
+      // Chromium won't let a page cancel a second Esc without a click or key press in
+      // between: the dialog then closes by itself, and onNativeClose below takes over.
+      if (!event.cancelable) return
       event.preventDefault()
       if (dismissibleRef.current) onCloseRef.current()
     }
+    // A close this component didn't ask for (see above): show it again, and let the
+    // parent decide (it unmounts it, keeps it, or asks first, e.g. "Discard changes?").
+    const onNativeClose = () => {
+      // "close" is async: by now the dialog may be open again (StrictMode remount), which makes it stale.
+      if (closingRef.current || dialog.open) return
+      dialog.showModal()
+      if (dismissibleRef.current) onCloseRef.current()
+    }
     dialog.addEventListener('cancel', onCancel)
-    return () => dialog.removeEventListener('cancel', onCancel)
+    dialog.addEventListener('close', onNativeClose)
+    return () => {
+      dialog.removeEventListener('cancel', onCancel)
+      dialog.removeEventListener('close', onNativeClose)
+    }
   }, [])
 
   function onKeyDown(event: KeyboardEvent<HTMLDialogElement>) {

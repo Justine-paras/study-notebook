@@ -4,7 +4,7 @@ import { NOTEBOOK_COLORS, type ID, type Notebook, type NotebookColor, type Noteb
 import type { AppContext } from '../context'
 import { removeNotebookLibrary } from '../files/library'
 import { deleteNotebookRow, insertNotebook, listNotebookRows, updateNotebookRow } from '../db/repositories/notebooks'
-import { invalid, newId, nowIso, optionalText, requireNotebook, requireText } from './common'
+import { invalid, newId, nowIso, optionalText, removeStoredFiles, requireNotebook, requireText } from './common'
 import { buildSummaries } from './progress'
 
 function requireColor(value: unknown): NotebookColor {
@@ -60,5 +60,5 @@ export async function deleteNotebook(ctx: AppContext, id: ID): Promise<void> {
   // Rows first (cascades to everything in the notebook); a leftover folder is
   // harmless, a row pointing at deleted files is not.
   deleteNotebookRow(ctx.db, id)
-  await removeNotebookLibrary(ctx.paths.libraryDir, id)
+  await removeStoredFiles(() => removeNotebookLibrary(ctx.paths.libraryDir, id), `the files of notebook ${id}`)
 }

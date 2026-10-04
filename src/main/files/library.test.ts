@@ -1,8 +1,18 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { mkdir, readdir, readFile, stat } from 'node:fs/promises'
+import { chmod, mkdir, readdir, readFile, stat, truncate, writeFile } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 import { AppError } from '@shared/errors'
-import { copyIntoLibrary, numberedName, removeFromLibrary, removeNotebookLibrary, safeFileName } from './library'
+import {
+  checkImportSize,
+  copyIntoLibrary,
+  friendlyCopyError,
+  MAX_IMPORT_BYTES,
+  MAX_TEXT_IMPORT_BYTES,
+  numberedName,
+  removeFromLibrary,
+  removeNotebookLibrary,
+  safeFileName
+} from './library'
 import { makeTempDir, writeFixture } from './testFixtures'
 
 describe('safeFileName', () => {
@@ -130,5 +140,72 @@ describe('library', () => {
     expect(await readdir(join(libraryDir, 'nb-8'))).toEqual(['keep-or-not.txt'])
     await expect(removeNotebookLibrary(libraryDir, 'nb-7')).resolves.toBeUndefined()
     await expect(removeNotebookLibrary(join(root, 'no-library'), 'nb-1')).resolves.toBeUndefined()
+  })
+
+  it('refuses files over the size cap before copying anything', async () => {
+    // Sparse files: the size is real to stat() but no disk space is used.
+    const bigPdf = join(originals, 'Huge Textbook.pdf')
+    await writeFile(bigPdf, '')
+    await truncate(bigPdf, MAX_IMPORT_BYTES + 1)
+    const err = await copyIntoLibrary(libraryDir, 'nb-big', bigPdf).catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(AppError)
+    expect((err as AppError).code).toBe('SOURCE_TOO_LARGE')
+    expect((err as AppError).message).toBe(
+      'This file is 201 MB, and the largest file Study Notebook can add is 200 MB. Split it into smaller files (for example one per chapter) and add those.'
+    )
+    await expect(stat(join(libraryDir, 'nb-big'))).rejects.toMatchObject({ code: 'ENOENT' })
+
+    const bigText = join(originals, 'dump.txt')
+    await writeFile(bigText, '')
+    await truncate(bigText, MAX_TEXT_IMPORT_BYTES + 1)
+    await expect(copyIntoLibrary(libraryDir, 'nb-big', bigText)).rejects.toMatchObject({ code: 'SOURCE_TOO_LARGE' })
+  })
+
+  it('accepts files right at the cap', async () => {
+    const atCap = join(originals, 'At cap.md')
+    await writeFile(atCap, '')
+    await truncate(atCap, MAX_TEXT_IMPORT_BYTES)
+    expect((await copyIntoLibrary(libraryDir, 'nb-cap', atCap)).sizeBytes).toBe(MAX_TEXT_IMPORT_BYTES)
+  })
+
+  it.runIf(process.platform !== 'win32' && process.getuid?.() !== 0)('explains files that cannot be read', async () => {
+    const locked = await writeFixture(originals, 'locked.pdf', 'secret')
+    await chmod(locked, 0o000)
+    try {
+      const err = await copyIntoLibrary(libraryDir, 'nb-locked', locked).catch((e: unknown) => e)
+      expect((err as AppError).code).toBe('EXTRACT_FAILED')
+      expect((err as AppError).message).toMatch(/open in another app or you don't have permission/)
+    } finally {
+      await chmod(locked, 0o644)
+    }
+  })
+})
+
+describe('friendlyCopyError', () => {
+  const errno = (code: string) => Object.assign(new Error(`${code}: copyfile 'C:\\a.pptx' -> 'C:\\b.pptx'`), { code })
+
+  it.each(['EBUSY', 'EPERM', 'EACCES'])('explains %s (file locked by PowerPoint, Word, antivirus)', (code) => {
+    const err = friendlyCopyError(errno(code))
+    expect(err).toBeInstanceOf(AppError)
+    expect((err as AppError).message).toBe("The file is open in another app or you don't have permission to read it. Close it there and try again.")
+  })
+
+  it('explains a full disk', () => {
+    expect((friendlyCopyError(errno('ENOSPC')) as AppError).message).toBe('Your disk is full. Free up some space and try again.')
+  })
+
+  it('passes other errors through unchanged', () => {
+    const other = errno('EIO')
+    expect(friendlyCopyError(other)).toBe(other)
+    expect(friendlyCopyError('boom')).toBe('boom')
+  })
+})
+
+describe('checkImportSize', () => {
+  it('uses the lower cap for text and Markdown', () => {
+    expect(() => checkImportSize('notes.md', MAX_TEXT_IMPORT_BYTES)).not.toThrow()
+    expect(() => checkImportSize('notes.MD', MAX_TEXT_IMPORT_BYTES + 1)).toThrow(/largest text file Study Notebook can add is 20 MB/)
+    expect(() => checkImportSize('slides.pptx', MAX_TEXT_IMPORT_BYTES + 1)).not.toThrow()
+    expect(() => checkImportSize('slides.pptx', MAX_IMPORT_BYTES + 1)).toThrow(/largest file Study Notebook can add is 200 MB/)
   })
 })

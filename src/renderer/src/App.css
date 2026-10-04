@@ -7,6 +7,10 @@
 }
 
 .app__main {
+  /* The containing block for absolutely positioned content (.sr-only text,
+     chart tables): without it they are placed against the page, escape this
+     scroll area, and give the whole window a second scrollbar. */
+  position: relative;
   flex: 1;
   min-height: 0;
   overflow-y: auto;

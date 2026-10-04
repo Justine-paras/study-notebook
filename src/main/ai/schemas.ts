@@ -134,25 +134,30 @@ export const SUMMARY_JSON_SCHEMA: JsonSchema = obj({
 
 const text = z.string().trim().min(1)
 
+/** Structured outputs don't guarantee the casing of enum values (e.g. "Medium"), so match them case-insensitively. */
+function looseEnum<const T extends readonly [string, ...string[]]>(values: T) {
+  return z.preprocess((value) => (typeof value === 'string' ? value.trim().toLowerCase() : value), z.enum(values))
+}
+
 const rawLessonQuestion = z.object({
-  type: z.enum(['mc', 'tf']),
+  type: looseEnum(['mc', 'tf']),
   prompt: text,
   options: z.array(z.string()),
   answer: text,
   explanation: text,
-  difficulty: z.enum(DIFFICULTIES),
+  difficulty: looseEnum(DIFFICULTIES),
   sourceRef: z.string()
 })
 
 const rawQuizQuestion = z.object({
   topicIndex: z.number().int(),
-  type: z.enum(QUESTION_TYPES),
+  type: looseEnum(QUESTION_TYPES),
   prompt: text,
   options: z.array(z.string()),
   answer: text,
   acceptable: z.array(z.string()),
   explanation: text,
-  difficulty: z.enum(DIFFICULTIES),
+  difficulty: looseEnum(DIFFICULTIES),
   sourceRef: z.string()
 })
 

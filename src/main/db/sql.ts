@@ -6,6 +6,13 @@ import type { DatabaseSync, SQLOutputValue, StatementSync } from 'node:sqlite'
 
 export type Row = Record<string, SQLOutputValue>
 
+/**
+ * Which notebooks a bulk read covers: one notebook, every notebook that is not
+ * archived (Today and Insights leave put-away subjects out, so they shouldn't
+ * pay to load their history), or all of them.
+ */
+export type NotebookScope = { notebookId: string } | 'unarchived' | 'all'
+
 const statementCache = new WeakMap<DatabaseSync, Map<string, StatementSync>>()
 
 /** A prepared statement for `sql`, compiled once per database connection. */

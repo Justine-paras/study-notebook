@@ -4,7 +4,7 @@
 import type { FinishTopicResult, RecordAnswerInput } from '@shared/api'
 import { isAppError } from '@shared/errors'
 import { applyRating, gradeResponse, localDate, newCardSchedule, reviewPlanLabels } from '@shared/learning'
-import type { AnswerRecord, Card, ExplanationFeedback, ID, Lesson, Question, Topic } from '@shared/types'
+import { QUESTION_TYPES, type AnswerRecord, type Card, type Difficulty, type ExplanationFeedback, type ID, type Lesson, type Question, type Topic } from '@shared/types'
 import type { AiSourceDoc, GeneratedCard } from '../ai'
 import type { AppContext } from '../context'
 import { insertAnswer, listAnswersForTopic } from '../db/repositories/answers'
@@ -33,6 +33,8 @@ import { selectTopicSources } from './topicSources'
 const LESSON_FLASHCARDS = 8
 const REVIEW_PLAN_LENGTH = 5
 const EXPLANATION_MAX = 20_000
+const QUESTION_TEXT_MAX = 20_000
+const RESPONSE_MAX = 5_000
 
 function requireLesson(ctx: AppContext, topicId: ID): Lesson {
   const lesson = findLessonByTopic(ctx.db, topicId)
@@ -60,7 +62,7 @@ export async function generateLesson(ctx: AppContext, topicId: ID, options: { re
   const otherTopics = listTopicRows(ctx.db, topic.notebookId)
     .filter((t) => t.id !== topic.id)
     .map(topicBrief)
-  const content = await runAiJob(ctx, 'lesson', `Writing your lesson on ${topic.title}`, (callOptions) =>
+  const content = await runAiJob(ctx, { task: 'lesson', subjectId: topic.id }, `Writing your lesson on ${topic.title}`, (callOptions) =>
     ctx.ai.generateLesson({ notebookName: notebook.name, topic: topicBrief(topic), sources: selection.docs, otherTopics }, callOptions)
   )
 
@@ -89,23 +91,36 @@ export async function generateLesson(ctx: AppContext, topicId: ID, options: { re
   return lesson
 }
 
+const DIFFICULTIES: readonly Difficulty[] = ['easy', 'medium', 'hard']
+
+/**
+ * The warm-up or check question the renderer sends back. It is graded and
+ * logged here, so an unknown type (which gradeResponse can't grade) or an
+ * oversized text is an input error rather than a junk row in the answer log.
+ */
 function requireQuestion(value: unknown): Question {
   if (typeof value !== 'object' || value === null) throw invalid('The question is missing.')
   const q = value as Partial<Question>
   if (typeof q.prompt !== 'string' || typeof q.answer !== 'string' || typeof q.type !== 'string') {
     throw invalid('The question is incomplete.')
   }
+  if (!(QUESTION_TYPES as readonly string[]).includes(q.type)) throw invalid(`Question type must be one of: ${QUESTION_TYPES.join(', ')}.`)
+  if (!q.prompt.trim() || q.prompt.length > QUESTION_TEXT_MAX || q.answer.length > QUESTION_TEXT_MAX) {
+    throw invalid('The question text is empty or too long.')
+  }
+  const strings = (list: unknown): string[] =>
+    Array.isArray(list) ? list.filter((o): o is string => typeof o === 'string').map((o) => o.slice(0, QUESTION_TEXT_MAX)) : []
   return {
     id: typeof q.id === 'string' ? q.id : newId(),
     type: q.type,
     prompt: q.prompt,
-    options: Array.isArray(q.options) ? q.options.filter((o): o is string => typeof o === 'string') : [],
+    options: strings(q.options),
     answer: q.answer,
-    acceptable: Array.isArray(q.acceptable) ? q.acceptable.filter((a): a is string => typeof a === 'string') : [],
-    explanation: typeof q.explanation === 'string' ? q.explanation : '',
+    acceptable: strings(q.acceptable),
+    explanation: typeof q.explanation === 'string' ? q.explanation.slice(0, QUESTION_TEXT_MAX) : '',
     topicId: typeof q.topicId === 'string' ? q.topicId : null,
-    difficulty: q.difficulty ?? 'medium',
-    sourceRef: typeof q.sourceRef === 'string' ? q.sourceRef : ''
+    difficulty: typeof q.difficulty === 'string' && (DIFFICULTIES as readonly string[]).includes(q.difficulty) ? q.difficulty : 'medium',
+    sourceRef: typeof q.sourceRef === 'string' ? q.sourceRef.slice(0, QUESTION_TEXT_MAX) : ''
   }
 }
 
@@ -114,7 +129,7 @@ export async function recordAnswer(ctx: AppContext, input: RecordAnswerInput): P
   const topic = requireTopic(ctx, input.topicId)
   if (input.source !== 'warmup' && input.source !== 'check') throw invalid('Answers can only be recorded for warm-up or check questions.')
   const question = requireQuestion(input.question)
-  const response = typeof input.response === 'string' ? input.response : ''
+  const response = typeof input.response === 'string' ? input.response.slice(0, RESPONSE_MAX) : ''
   const correct = gradeResponse(question, response)
   const record: AnswerRecord = {
     id: newId(),
@@ -177,7 +192,7 @@ export async function gradeExplanation(ctx: AppContext, topicId: ID, explanation
     // The rubric alone is enough to grade against when the files are gone.
     if (!isAppError(err) || err.code !== 'NO_SOURCES') throw err
   }
-  const feedback = await runAiJob(ctx, 'explanation', 'Reading your explanation', (options) =>
+  const feedback = await runAiJob(ctx, { task: 'explanation', subjectId: topic.id }, 'Reading your explanation', (options) =>
     ctx.ai.gradeExplanation(
       { topic: topicBrief(topic), prompt: lesson.content.explainPrompt, rubric: lesson.content.explainRubric, explanation: text, sources },
       options
@@ -264,7 +279,7 @@ export async function finishTopic(ctx: AppContext, topicId: ID): Promise<FinishT
   let generated: GeneratedCard[] = []
   if (!hasLessonCards) {
     const selection = selectTopicSources(ctx, topic)
-    generated = await runAiJob(ctx, 'flashcards', `Making flashcards for ${topic.title}`, (options) =>
+    generated = await runAiJob(ctx, { task: 'flashcards', subjectId: topic.id }, `Making flashcards for ${topic.title}`, (options) =>
       ctx.ai.generateFlashcards(
         { notebookName: notebook.name, topic: topicBrief(topic), lesson: lesson.content, sources: selection.docs, count: LESSON_FLASHCARDS },
         options

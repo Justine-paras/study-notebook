@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { Card, Exam, Quiz, Source, TopicProgress, TopicWithProgress } from '@shared/types'
 import type { SyllabusResult } from '@shared/api'
+import { MOCK_EXAM_MINUTES as PLAN_MOCK_EXAM_MINUTES } from '@shared/learning'
 import {
+  MOCK_EXAM_DEFAULTS,
+  MOCK_EXAM_MINUTES,
   applyOrder,
   cardDueLabel,
   countCards,
@@ -244,6 +247,11 @@ describe('mockExamInput', () => {
       topicIds: ['a', 'b'],
       title: 'Mock exam: Midterm'
     })
+  })
+
+  it("defaults to the length Today's plan budgets, and offers it as a choice", () => {
+    expect(MOCK_EXAM_DEFAULTS.timeLimitMin).toBe(PLAN_MOCK_EXAM_MINUTES)
+    expect(MOCK_EXAM_MINUTES).toContain(MOCK_EXAM_DEFAULTS.timeLimitMin)
   })
 
   it('covers every topic without an exam', () => {

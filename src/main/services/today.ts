@@ -17,7 +17,7 @@ export async function getToday(ctx: AppContext): Promise<TodayOverview> {
   // Archived notebooks are put away: they stay out of the plan, the exams and the shelf.
   const notebooks = listNotebookRows(ctx.db).filter((n) => !n.archived)
   const notebookById = new Map<ID, Notebook>(notebooks.map((n) => [n.id, n]))
-  const topicsByNotebook = loadAllTopicsByNotebook(ctx)
+  const topicsByNotebook = loadAllTopicsByNotebook(ctx, 'unarchived')
 
   const topics: PlanTopic[] = notebooks.flatMap((n) =>
     (topicsByNotebook.get(n.id) ?? []).map((t) => ({ ...t, notebookName: n.name, notebookCode: n.code }))

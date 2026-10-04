@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite'
 import type { Card, CardOrigin, CardState, ID } from '@shared/types'
-import { bool, fromBool, num, prepare, str, strOrNull, type Row } from '../sql'
+import { bool, fromBool, num, prepare, str, strOrNull, type NotebookScope, type Row } from '../sql'
 
 function toCard(row: Row): Card {
   return {
@@ -102,23 +102,30 @@ export function listCardsForTopic(db: DatabaseSync, topicId: ID): Card[] {
   return prepare(db, 'SELECT * FROM cards WHERE topic_id = ? ORDER BY created_at ASC, rowid ASC').all(topicId).map(toCard)
 }
 
-/** Non-suspended cards tied to a topic, for mastery. One notebook, or all when `notebookId` is null. */
-export function listActiveTopicCards(db: DatabaseSync, notebookId: ID | null): Card[] {
-  const rows = notebookId
-    ? prepare(db, 'SELECT * FROM cards WHERE notebook_id = ? AND topic_id IS NOT NULL AND suspended = 0').all(notebookId)
-    : prepare(db, 'SELECT * FROM cards WHERE topic_id IS NOT NULL AND suspended = 0').all()
+/** Non-suspended cards tied to a topic, for mastery, in the notebooks `scope` covers. */
+export function listActiveTopicCards(db: DatabaseSync, scope: NotebookScope): Card[] {
+  const rows =
+    scope === 'all'
+      ? prepare(db, 'SELECT * FROM cards WHERE topic_id IS NOT NULL AND suspended = 0').all()
+      : scope === 'unarchived'
+        ? prepare(
+            db,
+            `SELECT c.* FROM cards c JOIN notebooks n ON n.id = c.notebook_id
+             WHERE c.topic_id IS NOT NULL AND c.suspended = 0 AND n.archived = 0`
+          ).all()
+        : prepare(db, 'SELECT * FROM cards WHERE notebook_id = ? AND topic_id IS NOT NULL AND suspended = 0').all(scope.notebookId)
   return rows.map(toCard)
 }
 
-/** Every non-suspended card in non-archived notebooks. */
-export function listActiveCards(db: DatabaseSync): Card[] {
+/** Due times of the non-suspended cards in non-archived notebooks that fall due before `beforeIso` (overdue included), for the forecast. */
+export function listDueTimesBefore(db: DatabaseSync, beforeIso: string): { due: string }[] {
   return prepare(
     db,
-    `SELECT c.* FROM cards c JOIN notebooks n ON n.id = c.notebook_id
-     WHERE c.suspended = 0 AND n.archived = 0`
+    `SELECT c.due FROM cards c JOIN notebooks n ON n.id = c.notebook_id
+     WHERE c.suspended = 0 AND n.archived = 0 AND c.due < ?`
   )
-    .all()
-    .map(toCard)
+    .all(beforeIso)
+    .map((row) => ({ due: str(row, 'due') }))
 }
 
 /** Non-suspended cards due at or before `nowIso`, most overdue first. Archived notebooks are skipped unless asked for by id. */

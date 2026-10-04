@@ -2,30 +2,43 @@ import { useRef, useState } from 'react'
 import { ListTree } from 'lucide-react'
 import type { ID, Source } from '@shared/types'
 import { Button, Modal, Select, useToast, type ButtonVariant } from '../ui'
-import { useApiMutation } from '../../lib/queries'
+import { aiJobs, useAiAction } from '../../lib/aiJobs'
+import { ROUTES } from '../../lib/routes'
 import { syllabusCandidates, syllabusSummary } from './model'
 
 /**
  * Runs the AI syllabus reader for a notebook and toasts what it added. The
  * screen owns it (not the button) so the progress panel can sit above the
- * topic list while the button stays in the toolbar.
+ * topic list while the button stays in the toolbar. It is an app-wide job:
+ * leaving the notebook keeps it running, and coming back shows its progress.
  */
 export function useSyllabusExtraction(notebookId: ID) {
   const toast = useToast()
   const fileName = useRef('')
-  const mutation = useApiMutation('extractTopicsFromSyllabus', {
-    // On the mutation (not mutate()) so the toast still shows if the learner has left the page.
+  const key = `syllabus:${notebookId}`
+  const job = useAiAction('extractTopicsFromSyllabus', key, {
+    task: 'syllabus',
+    // A retry after leaving and coming back keeps the file name of the first try.
+    label: () => fileName.current || aiJobs.get(key)?.label || 'your syllabus',
+    href: ROUTES.notebook(notebookId),
+    // The summary toast below always shows (it says what was added), so no second "ready" toast.
+    announceSuccess: false,
     onSuccess: (result) => {
-      const summary = syllabusSummary(result, fileName.current)
+      const summary = syllabusSummary(result, fileName.current || (aiJobs.get(key)?.label ?? ''))
       toast.show({ tone: summary.tone, title: summary.title, message: summary.message })
     }
   })
   const run = (source: Source) => {
-    if (mutation.isPending) return
+    if (job.isPending) return
     fileName.current = source.fileName
-    mutation.mutate([notebookId, source.id])
+    job.run(notebookId, source.id)
   }
-  return { run, mutation, fileName: mutation.isPending || mutation.isError ? fileName.current : '' }
+  return {
+    run,
+    job,
+    /** The file being read (or that failed), for the progress and error panels. */
+    fileName: job.isPending || job.error ? (job.job?.label ?? '') : ''
+  }
 }
 
 export interface SyllabusButtonProps {

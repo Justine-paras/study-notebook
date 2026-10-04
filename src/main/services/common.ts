@@ -90,10 +90,32 @@ export function requireConfidence(value: unknown): Confidence | null {
   throw invalid('Confidence must be sure, unsure or guess.')
 }
 
+/** An optional id filter: undefined or null means "no filter"; anything but a string is an input error. */
+export function optionalId(value: unknown, field: string): ID | undefined {
+  if (value === undefined || value === null) return undefined
+  if (typeof value !== 'string') throw invalid(`${field} must be an id.`)
+  return value
+}
+
 export function requireIdList(value: unknown, field: string): ID[] {
   if (value === undefined) return []
   if (!Array.isArray(value) || value.some((v) => typeof v !== 'string')) throw invalid(`${field} must be a list of ids.`)
   return [...new Set(value as string[])]
+}
+
+/**
+ * Deletes stored copies after their rows are gone. Best effort: on Windows a
+ * file that is open in another app (a lecture PDF in a viewer) can't be
+ * removed, and reporting the whole delete as failed would be wrong, since
+ * the notebook or file is already gone from the app. The copy is left behind
+ * in the library folder, where it is harmless.
+ */
+export async function removeStoredFiles(remove: () => Promise<void>, what: string): Promise<void> {
+  try {
+    await remove()
+  } catch (err) {
+    console.warn(`[library] could not remove ${what}:`, err instanceof Error ? err.message : err)
+  }
 }
 
 export function topicBrief(topic: Topic): TopicBrief {
@@ -143,14 +165,15 @@ export function scheduleOf(card: Card): CardSchedule {
  */
 export async function runAiJob<T>(
   ctx: AppContext,
-  task: AiTask,
+  job: { task: AiTask; subjectId: ID | null },
   startMessage: string,
   call: (options: CallOptions) => Promise<T>
 ): Promise<T> {
   const jobId = newId()
+  const { task, subjectId } = job
   const emit = (progress: number | null, message: string): void => {
     try {
-      ctx.emitAiProgress({ jobId, task, progress, message })
+      ctx.emitAiProgress({ jobId, task, subjectId, progress, message })
     } catch {
       // A closed window must never fail the AI call itself.
     }

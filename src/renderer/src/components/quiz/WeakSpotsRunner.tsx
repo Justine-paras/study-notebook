@@ -2,10 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import { useQueries } from '@tanstack/react-query'
 import { ArrowRight, Sparkles } from 'lucide-react'
 import type { ID, QuizResult, TopicWithProgress } from '@shared/types'
+import { useAiAction } from '../../lib/aiJobs'
 import { api, isApiError, toApiError, type ApiError } from '../../lib/api'
 import { pluralize } from '../../lib/format'
 import { usePomodoroNotebook } from '../../lib/pomodoro'
-import { queryKeys, useApiMutation, useNotebook, useQuiz, useQuizResult } from '../../lib/queries'
+import { queryKeys, useNotebook, useQuiz, useQuizResult } from '../../lib/queries'
+import { ROUTES } from '../../lib/routes'
 import { AiWorking } from '../AiWorking'
 import { ErrorNotice } from '../ErrorNotice'
 import { MasteryPill } from '../MasteryPill'
@@ -129,12 +131,22 @@ function WeakGroup({ planDate, group, topics, count, autoStart, position, nextLa
   const [quizId, setQuizId] = useState<ID | null>(() => readStored(storageKey, parseQuizId, null))
   const [result, setResult] = useState<QuizResult | null>(null)
   const quiz = useQuiz(quizId ?? undefined)
-  const create = useApiMutation('createQuiz', {
+  // A job: it keeps running if the learner leaves the session, and coming back
+  // (or a second "continue") joins it instead of writing a second quiz.
+  const create = useAiAction('createQuiz', `weak:${storageKey}`, {
+    task: 'quiz',
+    label: notebook.data ? `Weak-spot questions for ${notebook.data.name}` : 'Weak-spot questions',
+    href: ROUTES.session('weak'),
     onSuccess: (created) => {
       writeStored(storageKey, created.id)
       setQuizId(created.id)
     }
   })
+  // A quiz written while another copy of this screen was mounted is in storage by now.
+  const created = create.data
+  useEffect(() => {
+    if (created) setQuizId((current) => current ?? readStored(storageKey, parseQuizId, null))
+  }, [created, storageKey])
 
   // A remembered quiz that was deleted since is simply forgotten.
   useEffect(() => {
@@ -148,10 +160,9 @@ function WeakGroup({ planDate, group, topics, count, autoStart, position, nextLa
   const start = () => {
     if (startedRef.current) return
     startedRef.current = true
-    create.mutate(
-      [{ notebookId: group.notebookId, topicId: null, kind: 'weak_spots', settings: weakQuizSettings(count), topicIds: group.topicIds }],
-      { onError: () => (startedRef.current = false) }
-    )
+    create
+      .runAsync({ notebookId: group.notebookId, topicId: null, kind: 'weak_spots', settings: weakQuizSettings(count), topicIds: group.topicIds })
+      .catch(() => (startedRef.current = false))
   }
   const startRef = useRef(start)
   startRef.current = start
@@ -174,6 +185,8 @@ function WeakGroup({ planDate, group, topics, count, autoStart, position, nextLa
         task="quiz"
         title="Writing questions on your weak spots"
         explanation="Writing a mixed set of questions on the topics you keep missing, with extra attention to your recent mistakes."
+        startedAt={create.job?.startedAt}
+        subjectId={group.notebookId}
       />
     )
   }
@@ -199,12 +212,12 @@ function WeakGroup({ planDate, group, topics, count, autoStart, position, nextLa
             </li>
           ))}
         </ul>
-        <ErrorNotice error={create.error} onRetry={start} title="Your questions couldn't be written" />
+        <ErrorNotice error={create.error} onRetry={start} onDismiss={create.dismiss} title="Your questions couldn't be written" />
         <div className="weak-intro__actions">
           <Button size="lg" icon={<Sparkles size={18} aria-hidden="true" />} onClick={start}>
             Write my questions
           </Button>
-          <span className="text-sm muted">Takes up to a minute.</span>
+          <span className="text-sm muted">Takes a minute or two.</span>
         </div>
       </Sheet>
     )

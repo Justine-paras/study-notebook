@@ -157,7 +157,7 @@ export async function extractTopicsFromSyllabus(ctx: AppContext, notebookId: ID,
   const before = listTopicRows(ctx.db, notebookId)
   // With an empty query the cut keeps the opening pages, where syllabi list their schedule.
   const selection = selectSources([{ id: source.id, fileName: source.fileName, kind: source.kind, text }], { titles: [], descriptions: [] })
-  const extraction = await runAiJob(ctx, 'syllabus', `Reading ${source.fileName}`, (options) =>
+  const extraction = await runAiJob(ctx, { task: 'syllabus', subjectId: notebookId }, `Reading ${source.fileName}`, (options) =>
     ctx.ai.extractSyllabus(
       {
         notebookName: notebook.name,

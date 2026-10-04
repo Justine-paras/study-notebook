@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, ArrowRight, Flag, Send, Timer } from 'lucide-react'
 import type { ID, Quiz, QuizResult } from '@shared/types'
 import { api, toApiError, type ApiError } from '../../lib/api'
 import { formatClock, pluralize } from '../../lib/format'
+import { queryKeys } from '../../lib/queries'
 import { useHotkeys } from '../../lib/useHotkeys'
 import { ErrorNotice } from '../ErrorNotice'
 import { Button, Kbd, Panel, ProgressBar, Sheet, useConfirm, useToast } from '../ui'
@@ -60,17 +62,24 @@ export function ExamRunner({ quiz, onSubmitted }: ExamRunnerProps) {
   // The clock starts the first time the exam is opened.
   const [startedAt, setStartedAt] = useState(quiz.startedAt)
   const [startError, setStartError] = useState<ApiError | null>(null)
+  const queryClient = useQueryClient()
   useEffect(() => {
     if (startedAt) return
     let cancelled = false
     api.startQuiz(quiz.id).then(
-      (started) => !cancelled && setStartedAt(started.startedAt),
+      (started) => {
+        // The exam lists show "in progress" from now on.
+        void queryClient.invalidateQueries({ queryKey: queryKeys.quizzes(started.notebookId) })
+        if (cancelled) return
+        queryClient.setQueryData(queryKeys.quiz(started.id), started)
+        setStartedAt(started.startedAt)
+      },
       (err: unknown) => !cancelled && setStartError(toApiError(err))
     )
     return () => {
       cancelled = true
     }
-  }, [quiz.id, startedAt])
+  }, [quiz.id, startedAt, queryClient])
 
   const timeLimit = quiz.settings.timeLimitMin
   const timed = timeLimit !== null

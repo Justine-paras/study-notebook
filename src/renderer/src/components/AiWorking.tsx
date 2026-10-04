@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { AiTask } from '@shared/types'
+import type { AiTask, ID } from '@shared/types'
 import { useAiProgress } from '../lib/aiProgress'
 import { formatClock } from '../lib/format'
 import { ProgressBar } from './ui/ProgressBar'
@@ -16,12 +16,16 @@ export const AI_TASK_TITLES: Record<AiTask, string> = {
 }
 
 export const AI_TASK_EXPLANATIONS: Record<AiTask, string> = {
-  syllabus: 'Reading your syllabus to list the topics in course order and any exam dates. This usually takes under a minute.',
-  lesson: 'Reading your files and writing a lesson in small parts. This can take a minute.',
-  quiz: 'Writing questions from your files and mixing in earlier topics. This can take up to a minute.',
-  flashcards: 'Turning the lesson and your mistakes into flashcards. This takes a few seconds.',
-  explanation: 'Comparing your explanation with the lesson and your files to see what is covered and what is missing.',
+  syllabus: 'Reading your syllabus to list the topics in course order and any exam dates. This usually takes about a minute.',
+  lesson: 'Reading your files and writing an in-depth lesson in small parts. This usually takes one to two minutes.',
+  quiz: 'Writing questions from your files and mixing in earlier topics. This can take a minute or two.',
+  flashcards: 'Turning the lesson and your mistakes into flashcards. This can take up to a minute.',
+  explanation: 'Comparing your explanation with the lesson and your files to see what is covered and what is missing. This takes about half a minute.',
   summary: 'Reading the file and writing a short summary of its main points. This can take a minute.'
+}
+
+function secondsSince(time: number): number {
+  return Math.max(0, Math.floor((Date.now() - time) / 1000))
 }
 
 export interface AiWorkingProps {
@@ -32,21 +36,36 @@ export interface AiWorkingProps {
   explanation?: string
   /** Smaller, for inline use inside panels and rows. */
   compact?: boolean
+  /**
+   * When the job started (AiJob.startedAt). Keeps the elapsed time and the
+   * latest progress right when the panel mounts mid-job (the learner left the
+   * page and came back). Default: when the panel mounted.
+   */
+  startedAt?: number
+  /**
+   * What the job works on (topic, file or notebook id, as in
+   * AiProgressEvent.subjectId), so another job of the same task, e.g. a
+   * second file being summarized, doesn't show its progress here.
+   */
+  subjectId?: ID | null
   className?: string
 }
 
 /**
  * Shown while an AI call runs (mount it while the mutation is pending):
  * live progress message, elapsed time and a calm note on what is being made.
- *   {generate.isPending && <AiWorking task="lesson" />}
+ *   {lesson.isPending && <AiWorking task="lesson" startedAt={lesson.job?.startedAt} />}
  */
-export function AiWorking({ task, title, explanation, compact = false, className }: AiWorkingProps) {
-  const progress = useAiProgress(task)
-  const [startedAt] = useState(() => Date.now())
-  const [elapsed, setElapsed] = useState(0)
+export function AiWorking({ task, title, explanation, compact = false, startedAt: jobStartedAt, subjectId, className }: AiWorkingProps) {
+  const [mountedAt] = useState(() => Date.now())
+  const startedAt = jobStartedAt ?? mountedAt
+  const progress = useAiProgress(task, startedAt, subjectId)
+  const [elapsed, setElapsed] = useState(() => secondsSince(startedAt))
 
   useEffect(() => {
-    const id = window.setInterval(() => setElapsed(Math.floor((Date.now() - startedAt) / 1000)), 1000)
+    const update = () => setElapsed(secondsSince(startedAt))
+    update()
+    const id = window.setInterval(update, 1000)
     return () => window.clearInterval(id)
   }, [startedAt])
 
@@ -77,7 +96,7 @@ export function AiWorking({ task, title, explanation, compact = false, className
         {message ?? 'Starting…'}
       </div>
       {!compact && <p className="ai-working__explanation">{explanation ?? AI_TASK_EXPLANATIONS[task]}</p>}
-      {!compact && <p className="hand hand--sm ai-working__note">you can keep using the app while this runs</p>}
+      {!compact && <p className="hand hand--sm ai-working__note">you can leave this page: it keeps going and tells you when it's done</p>}
     </div>
   )
 }

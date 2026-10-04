@@ -58,6 +58,16 @@ export function masteryStatus(mastery: number): MasteryStatus {
   return { label: 'Strong', tone: 'good' }
 }
 
+/**
+ * Status for a row of the weak-topic list. Every topic there is weak, so it
+ * never reads "Strong" with a green bar: a high mastery with repeated
+ * sure-but-wrong answers (the row's reason says so) is still "Getting there".
+ */
+export function weakTopicStatus(mastery: number): MasteryStatus {
+  const status = masteryStatus(mastery)
+  return status.tone === 'good' ? { label: 'Getting there', tone: 'caution' } : status
+}
+
 /** "CS 201" when the notebook has a code, else its name. */
 export function subjectLabel(topic: Pick<WeakTopic, 'notebookCode' | 'notebookName'>): string {
   return topic.notebookCode.trim() || topic.notebookName

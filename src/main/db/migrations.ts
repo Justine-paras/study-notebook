@@ -173,6 +173,28 @@ export const MIGRATIONS: readonly string[] = [
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
   );
+  `,
+
+  // 2: indexes for foreign-key child columns and the hot queries.
+  // Without an index on a child column SQLite scans the whole child table for
+  // every parent row it deletes or re-keys, so deleting a notebook with 1,000
+  // cards scanned the answer log 1,000 times (seconds on a semester of data).
+  // Composite indexes serve "per notebook, by time" reads (due cards of one
+  // notebook, last studied, a notebook's answers in order) and replace the
+  // single-column ones they start with. Only indexes change: no data is touched.
+  `
+  CREATE INDEX IF NOT EXISTS idx_answers_card ON answers(card_id);
+  CREATE INDEX IF NOT EXISTS idx_answers_quiz ON answers(quiz_id);
+  CREATE INDEX IF NOT EXISTS idx_quizzes_topic ON quizzes(topic_id);
+  CREATE INDEX IF NOT EXISTS idx_notes_source ON notes(source_id);
+
+  CREATE INDEX IF NOT EXISTS idx_cards_notebook_due ON cards(notebook_id, due);
+  DROP INDEX IF EXISTS idx_cards_notebook;
+  CREATE INDEX IF NOT EXISTS idx_answers_notebook_answered ON answers(notebook_id, answered_at);
+  DROP INDEX IF EXISTS idx_answers_notebook;
+  CREATE INDEX IF NOT EXISTS idx_review_logs_notebook_reviewed ON review_logs(notebook_id, reviewed_at);
+  DROP INDEX IF EXISTS idx_review_logs_notebook;
+  CREATE INDEX IF NOT EXISTS idx_focus_kind_started ON focus_sessions(kind, started_at);
   `
 ]
 

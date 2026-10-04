@@ -49,8 +49,16 @@ export function InstantQuestion({
   const rootRef = useRef<HTMLDivElement>(null)
   const [draft, setDraft] = useState('')
   const record = useApiMutation('recordAnswer', {
-    // Mastery on the header and in the notebook moves with every answer.
-    invalidate: [queryKeys.topic(topicId), queryKeys.topics(notebookId)]
+    // Every answer moves mastery (topic header, notebook, shelf), weak topics
+    // and calibration (Today, Insights). The lesson itself is left alone.
+    invalidate: [
+      queryKeys.topic(topicId),
+      queryKeys.topics(notebookId),
+      queryKeys.notebook(notebookId),
+      queryKeys.notebooks(),
+      queryKeys.today(),
+      queryKeys.insights()
+    ]
   })
   const choice = isChoiceQuestion(question)
   const answered = answer !== undefined

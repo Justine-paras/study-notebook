@@ -1,22 +1,48 @@
 # Windows installer for Study Notebook (npm run dist:win).
+# Writes dist/Study-Notebook-Setup-<version>.exe: a one-click, per-user
+# install (no admin rights) into %LOCALAPPDATA%\Programs, with Start menu and
+# desktop shortcuts. Study data lives in %APPDATA%\Study Notebook and is kept
+# when the app is uninstalled or updated.
+
+# Must match APP_ID in src/main/index.ts: Windows only shows notifications for
+# an app id that has a Start menu shortcut, which the installer creates.
 appId: com.justineparas.studynotebook
 productName: Study Notebook
 directories:
+  # icon.png (512x512, made by `npm run icon`) is picked up from here.
   buildResources: resources
   output: dist
 files:
   - out/**/*
   - package.json
+  # pdfjs's optional canvas package only matters for rendering pages, which
+  # the app never does (text extraction works without it). It is ~60 MB of
+  # native binaries, and a build made on Linux would ship Linux-only ones.
+  - '!node_modules/@napi-rs/**'
 # pdfjs loads its .mjs build, worker, character maps and standard fonts from
-# real files at runtime, which is safest outside the asar archive.
+# real files at run time (src/main/files/esm.ts uses the unpacked copy).
 asarUnpack:
   - node_modules/pdfjs-dist/**
+# Close doors the app never uses: running the exe as plain Node, NODE_OPTIONS,
+# --inspect, and loading app code from outside app.asar.
+electronFuses:
+  runAsNode: false
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  onlyLoadAppFromAsar: true
+  enableCookieEncryption: true
 win:
   target:
     - target: nsis
       arch: [x64]
 nsis:
-  oneClick: false
+  oneClick: true
   perMachine: false
-  allowToChangeInstallationDirectory: true
+  artifactName: Study-Notebook-Setup-${version}.${ext}
   shortcutName: Study Notebook
+  uninstallDisplayName: Study Notebook
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  runAfterFinish: true
+  # Notebooks, files and review history must survive an uninstall/reinstall.
+  deleteAppDataOnUninstall: false

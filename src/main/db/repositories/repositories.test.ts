@@ -2,19 +2,29 @@ import type { DatabaseSync } from 'node:sqlite'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { AnswerRecord, Card, Exam, LessonContent, Note, Notebook, Quiz, ReviewLog, Source, Topic } from '@shared/types'
 import { openDatabase } from '../database'
-import { lastStudiedByNotebook } from './activity'
-import { insertAnswer, listRecentMistakes, listTopicAnswers } from './answers'
-import { countDueCardsByNotebook, countLongTermCards, findCard, findCards, insertCard, listDueCards, updateCardRow } from './cards'
+import { hasStudyActivityBetween, lastStudiedByNotebook } from './activity'
+import { insertAnswer, listRatedAnswerFactsSince, listRecentMistakes, listTopicAnswerFacts, listTopicAnswers } from './answers'
+import {
+  countDueCardsByNotebook,
+  countLongTermCards,
+  findCard,
+  findCards,
+  insertCard,
+  listActiveTopicCards,
+  listDueCards,
+  listDueTimesBefore,
+  updateCardRow
+} from './cards'
 import { insertExam, listExamRows, listUpcomingExamRows } from './exams'
 import { insertFocusSession, listFocusSessionsSince } from './focusSessions'
 import { findLessonByTopic, upsertLesson } from './lessons'
 import { findNotebook, insertNotebook, listNotebookRows, updateNotebookRow, deleteNotebookRow } from './notebooks'
 import { findTopicNoteByKind, insertNote, listNoteRows } from './notes'
 import { findQuizRecord, insertQuiz, recentQuizPrompts, updateQuizProgress } from './quizzes'
-import { insertReviewLog, listReviewLogs } from './reviewLogs'
+import { insertReviewLog, listReviewLogs, listReviewLogsIn } from './reviewLogs'
 import { deleteSetting, readSetting, readSettingRows, writeSetting } from './settings'
 import { findSource, getSourceTextRow, insertSource, listReadySourceTexts, listSourceRows, setSourceText, updateSourceRow } from './sources'
-import { deleteTopicRow, findTopic, insertTopic, listTopicRows, nextTopicOrderIndex, updateTopicRow } from './topics'
+import { deleteTopicRow, findTopic, findTopicTitles, insertTopic, listTopicRows, listTopicRowsIn, nextTopicOrderIndex, updateTopicRow } from './topics'
 
 let db: DatabaseSync
 
@@ -341,5 +351,71 @@ describe('notes, exams, focus, settings, activity', () => {
     expect(readSetting(db, 'theme')).toBeUndefined()
     db.prepare("INSERT INTO settings (key, value) VALUES ('broken', '{')").run()
     expect(readSettingRows(db).has('broken')).toBe(false)
+  })
+})
+
+describe('scoped and lean reads', () => {
+  beforeEach(() => {
+    insertNotebook(db, notebook('open'))
+    insertNotebook(db, notebook('shelved', { archived: true }))
+    insertTopic(db, topic('t-open', 'open', 0))
+    insertTopic(db, topic('t-shelved', 'shelved', 0))
+    insertCard(db, card('c-open', 'open', 't-open', { due: '2026-10-05T08:00:00.000Z' }))
+    insertCard(db, card('c-shelved', 'shelved', 't-shelved', { due: '2026-10-03T08:00:00.000Z' }))
+    insertCard(db, card('c-later', 'open', 't-open', { due: '2026-10-20T08:00:00.000Z' }))
+    insertCard(db, card('c-suspended', 'open', 't-open', { due: '2026-10-01T08:00:00.000Z', suspended: true }))
+    insertAnswer(db, answer('a-open', 'open', 't-open', { confidence: 'sure', answeredAt: '2026-10-03T09:00:00.000Z' }))
+    insertAnswer(db, answer('a-shelved', 'shelved', 't-shelved', { confidence: null, answeredAt: '2026-10-03T09:30:00.000Z' }))
+    const log = (id: string, cardId: string): ReviewLog => ({
+      id,
+      cardId,
+      rating: 3,
+      confidence: null,
+      stateBefore: 'review',
+      scheduledDays: 1,
+      elapsedDays: 1,
+      reviewedAt: '2026-10-03T10:00:00.000Z'
+    })
+    insertReviewLog(db, log('r-open', 'c-open'), 'open')
+    insertReviewLog(db, log('r-shelved', 'c-shelved'), 'shelved')
+  })
+
+  it('leaves archived notebooks out of the unarchived scope', () => {
+    expect(listTopicRowsIn(db, 'unarchived').map((t) => t.id)).toEqual(['t-open'])
+    expect(listTopicRowsIn(db, 'all').map((t) => t.id).sort()).toEqual(['t-open', 't-shelved'])
+    expect(listTopicRowsIn(db, { notebookId: 'shelved' }).map((t) => t.id)).toEqual(['t-shelved'])
+    expect(listTopicAnswerFacts(db, 'unarchived').map((a) => a.id)).toEqual(['a-open'])
+    expect(listTopicAnswerFacts(db, 'all').map((a) => a.id).sort()).toEqual(['a-open', 'a-shelved'])
+    expect(listActiveTopicCards(db, 'unarchived').map((c) => c.id).sort()).toEqual(['c-later', 'c-open'])
+    expect(listActiveTopicCards(db, { notebookId: 'shelved' }).map((c) => c.id)).toEqual(['c-shelved'])
+    expect(listReviewLogsIn(db, 'unarchived').map((r) => r.id)).toEqual(['r-open'])
+    expect(listReviewLogs(db, null).map((r) => r.id).sort()).toEqual(['r-open', 'r-shelved'])
+  })
+
+  it('reads answer facts without their text', () => {
+    expect(listTopicAnswerFacts(db, { notebookId: 'open' })).toEqual([
+      { id: 'a-open', topicId: 't-open', cardId: null, source: 'warmup', correct: false, confidence: 'sure', answeredAt: '2026-10-03T09:00:00.000Z' }
+    ])
+    expect(listRatedAnswerFactsSince(db, '2026-10-01T00:00:00.000Z').map((a) => a.id)).toEqual(['a-open'])
+    expect(listRatedAnswerFactsSince(db, '2026-10-04T00:00:00.000Z')).toEqual([])
+  })
+
+  it('lists due times before a cutoff, overdue included, for unarchived unsuspended cards', () => {
+    expect(listDueTimesBefore(db, '2026-10-11T00:00:00.000Z')).toEqual([{ due: '2026-10-05T08:00:00.000Z' }])
+  })
+
+  it('finds topic titles by id', () => {
+    expect(findTopicTitles(db, ['t-open', 'ghost'])).toEqual(new Map([['t-open', 'Topic t-open']]))
+    expect(findTopicTitles(db, [])).toEqual(new Map())
+  })
+
+  it('probes study activity in a time window (answers, reviews, focus sessions but not breaks)', () => {
+    expect(hasStudyActivityBetween(db, '2026-10-03T00:00:00.000Z', '2026-10-04T00:00:00.000Z')).toBe(true)
+    expect(hasStudyActivityBetween(db, '2026-10-03T09:00:00.001Z', '2026-10-03T09:30:00.000Z')).toBe(false)
+    expect(hasStudyActivityBetween(db, '2026-10-03T09:59:00.000Z', '2026-10-03T10:01:00.000Z')).toBe(true)
+    insertFocusSession(db, { id: 'b', notebookId: null, kind: 'break', startedAt: '2026-10-06T09:00:00.000Z', endedAt: '2026-10-06T09:05:00.000Z', minutes: 5 })
+    expect(hasStudyActivityBetween(db, '2026-10-06T00:00:00.000Z', '2026-10-07T00:00:00.000Z')).toBe(false)
+    insertFocusSession(db, { id: 'f', notebookId: null, kind: 'focus', startedAt: '2026-10-06T10:00:00.000Z', endedAt: '2026-10-06T10:25:00.000Z', minutes: 25 })
+    expect(hasStudyActivityBetween(db, '2026-10-06T00:00:00.000Z', '2026-10-07T00:00:00.000Z')).toBe(true)
   })
 })

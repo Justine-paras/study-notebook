@@ -1,6 +1,7 @@
 // Pure helpers for today's session (/session): which part runs, what each
 // part takes from the plan, and how weak-spot quizzes are split per notebook.
 
+import { WEAK_SPOT_QUESTIONS, weakSpotQuizSize } from '@shared/learning'
 import { QUESTION_TYPES, type ID, type QuizSettings, type TodayPlan, type TopicProgress } from '@shared/types'
 import { pluralize } from '../../lib/format'
 
@@ -84,13 +85,12 @@ export function groupTopicsByNotebook(order: readonly ID[], topics: readonly { i
   return groups
 }
 
-export const WEAK_QUIZ_COUNT = 8
-const MIN_WEAK_QUIZ_COUNT = 4
+// The same rule sizes the weak block of Today's plan (its minutes estimate), so it lives in @shared/learning.
+export const WEAK_QUIZ_COUNT = WEAK_SPOT_QUESTIONS
 
 /** 8 questions in one quiz; split across notebooks without dropping below 4 each. */
 export function weakQuizCount(groupCount: number): number {
-  if (groupCount <= 1) return WEAK_QUIZ_COUNT
-  return Math.max(MIN_WEAK_QUIZ_COUNT, Math.ceil(WEAK_QUIZ_COUNT / groupCount))
+  return weakSpotQuizSize(groupCount)
 }
 
 export function weakQuizSettings(count: number): QuizSettings {

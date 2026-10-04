@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { weakSpotQuizSize } from '@shared/learning'
 import type { PlanBlock } from '@shared/types'
 import {
   groupTopicsByNotebook,
@@ -90,6 +91,8 @@ describe('weak spot quizzes', () => {
     expect(weakQuizCount(1)).toBe(8)
     expect(weakQuizCount(2)).toBe(4)
     expect(weakQuizCount(3)).toBe(4)
+    // Today's plan estimates the weak block from the same rule.
+    for (const n of [1, 2, 3, 4, 5]) expect(weakQuizCount(n)).toBe(weakSpotQuizSize(n))
   })
 
   it('uses every question type, mixed difficulty and weak focus', () => {

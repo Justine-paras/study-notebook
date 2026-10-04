@@ -59,6 +59,40 @@
   color: var(--accent-hand);
 }
 
+/* A running AI job (lesson, quiz...), linking back to where it shows. */
+.topbar__ai {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control-sm);
+  max-width: 280px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+a.topbar__ai:hover {
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+
+.topbar__ai-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.topbar__ai-time {
+  color: var(--muted);
+  font-weight: 600;
+}
+
 /* Pomodoro widget */
 .pomodoro {
   --pomo-color: var(--pomo-focus);
@@ -118,6 +152,20 @@
 
 @media (max-width: 1000px) {
   .topbar__streak {
+    display: none;
+  }
+}
+
+/* While an AI job runs, it takes the streak's place below full width (the bar must not wrap). */
+@media (max-width: 1360px) {
+  .topbar__ai + .topbar__streak {
+    display: none;
+  }
+}
+
+/* Narrow windows keep the AI indicator to a spinner and its clock. */
+@media (max-width: 1240px) {
+  .topbar__ai-text {
     display: none;
   }
 }

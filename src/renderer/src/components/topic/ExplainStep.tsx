@@ -1,6 +1,9 @@
+import { useEffect } from 'react'
 import { ArrowRight, NotebookPen, Sparkles } from 'lucide-react'
 import type { ExplanationFeedback, Lesson, TopicWithProgress } from '@shared/types'
-import { queryKeys, useApiMutation } from '../../lib/queries'
+import { useAiAction } from '../../lib/aiJobs'
+import { queryKeys } from '../../lib/queries'
+import { ROUTES } from '../../lib/routes'
 import { useHotkeys } from '../../lib/useHotkeys'
 import { AiWorking } from '../AiWorking'
 import { ErrorNotice } from '../ErrorNotice'
@@ -57,15 +60,24 @@ function feedbackRows(feedback: ExplanationFeedback): FeedbackRow[] {
 export function ExplainStep({ topic, lesson, onNext }: ExplainStepProps) {
   // The draft survives leaving the step (or the app) until it is checked.
   const [draft, setDraft] = useStoredState(explainDraftStorageKey(lesson.id), EMPTY, parseDraft)
-  const grade = useApiMutation('gradeExplanation', {
+  const grade = useAiAction('gradeExplanation', `explain:${lesson.id}`, {
+    task: 'explanation',
+    label: `Your explanation of ${topic.title}`,
+    href: ROUTES.topic(topic.id, 'explain'),
     invalidate: [queryKeys.notes(topic.notebookId), queryKeys.notes(topic.notebookId, topic.id)],
+    // Saved even if the learner has moved on, so the feedback is there when they come back.
     onSuccess: (feedback) => setDraft((current) => ({ ...current, feedback }))
   })
+  // A check that finished while this step was not on screen (or before a remount) still shows.
+  const finished = grade.data
+  useEffect(() => {
+    if (finished) setDraft((current) => (current.feedback === finished ? current : { ...current, feedback: finished }))
+  }, [finished, setDraft])
   const tooShort = draft.text.trim().length < MIN_LENGTH
 
   const check = () => {
     if (tooShort || grade.isPending) return
-    grade.mutate([topic.id, draft.text.trim()])
+    grade.run(topic.id, draft.text.trim())
   }
   useHotkeys({ 'mod+enter': check }, { allowInInputs: true })
 
@@ -100,8 +112,8 @@ export function ExplainStep({ topic, lesson, onNext }: ExplainStepProps) {
         )}
       </div>
 
-      {grade.isPending && <AiWorking task="explanation" compact />}
-      <ErrorNotice error={grade.error} onRetry={check} title="Your explanation couldn't be checked" />
+      {grade.isPending && <AiWorking task="explanation" compact startedAt={grade.job?.startedAt} subjectId={topic.id} />}
+      <ErrorNotice error={grade.error} onRetry={check} onDismiss={grade.dismiss} title="Your explanation couldn't be checked" />
 
       {feedback && !grade.isPending && (
         <section className="explain__feedback" aria-label="Feedback on your explanation" role="status">

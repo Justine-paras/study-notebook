@@ -9,7 +9,8 @@ import {
   overconfidenceNote,
   shownAnswer,
   studyTotals,
-  subjectLabel
+  subjectLabel,
+  weakTopicStatus
 } from './insightsModel'
 
 function buckets(sure: [number, number], unsure: [number, number], guess: [number, number]): CalibrationBucket[] {
@@ -74,6 +75,16 @@ describe('masteryStatus', () => {
     expect(masteryStatus(48)).toEqual({ label: 'Needs work', tone: 'bad' })
     expect(masteryStatus(60)).toEqual({ label: 'Getting there', tone: 'caution' })
     expect(masteryStatus(80)).toEqual({ label: 'Strong', tone: 'good' })
+  })
+})
+
+describe('weakTopicStatus', () => {
+  it('never calls a weak topic strong', () => {
+    expect(weakTopicStatus(48)).toEqual({ label: 'Needs work', tone: 'bad' })
+    expect(weakTopicStatus(70)).toEqual({ label: 'Getting there', tone: 'caution' })
+    // Weak from sure-but-wrong answers despite a high mastery.
+    expect(weakTopicStatus(80)).toEqual({ label: 'Getting there', tone: 'caution' })
+    expect(weakTopicStatus(96)).toEqual({ label: 'Getting there', tone: 'caution' })
   })
 })
 

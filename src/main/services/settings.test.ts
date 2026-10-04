@@ -1,12 +1,17 @@
+import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AppError } from '@shared/errors'
 import { createTestContext, type TestContext } from '../../../tests/unit/helpers/context'
 import {
   DEFAULT_SETTINGS,
   clearApiKey,
+  exportBackup,
   getAiConfig,
   getSettings,
   getThemePreference,
+  isLiveDatabaseFile,
   openDataFolder,
   readStoredSettings,
   setApiKey,
@@ -123,6 +128,7 @@ describe('API key', () => {
     await expectInvalidAsync(setApiKey(ctx, '   '))
     await expectInvalidAsync(setApiKey(ctx, 'not-a-key'))
     await expectInvalidAsync(setApiKey(ctx, 'sk-ant-has space'))
+    await expectInvalidAsync(setApiKey(ctx, `sk-ant-${'a'.repeat(1_000)}`))
 
     const settings = await setApiKey(ctx, '  sk-ant-test-123  ')
     expect(settings.hasApiKey).toBe(true)
@@ -143,9 +149,13 @@ describe('API key', () => {
     expect(getAiConfig(ctx).apiKey).toBe('sk-ant-stored')
   })
 
-  it('treats a key that no longer decrypts as missing', () => {
+  it('treats a key that no longer decrypts as missing', async () => {
     ctx.db.prepare("INSERT INTO settings (key, value) VALUES ('apiKey', '\"enc:garbage\"')").run()
     expect(getAiConfig(ctx).apiKey).toBeNull()
+    // Settings must ask for the key again rather than claim one is saved.
+    expect((await getSettings(ctx)).hasApiKey).toBe(false)
+    expect((await setApiKey(ctx, 'sk-ant-again')).hasApiKey).toBe(true)
+    expect(getAiConfig(ctx).apiKey).toBe('sk-ant-again')
   })
 
   it('reports demo mode from the context', () => {
@@ -163,5 +173,37 @@ describe('desktop actions', () => {
 
   it('escapes quotes in SQL string literals', () => {
     expect(sqlStringLiteral("C:\\Users\\O'Brien\\backup.db")).toBe("'C:\\Users\\O''Brien\\backup.db'")
+  })})
+
+describe('exportBackup', () => {
+  it('never writes the backup over the live database or its WAL files', async () => {
+    const dbPath = join(ctx.tempDir, 'study.db')
+    writeFileSync(dbPath, 'live database')
+    ctx.paths.dbPath = dbPath
+    for (const target of [dbPath, `${dbPath}-wal`, join(ctx.tempDir, '.', 'study.db')]) {
+      ctx.desktop.savePath = target
+      await expectInvalidAsync(exportBackup(ctx))
+    }
+    expect(readFileSync(dbPath, 'utf8')).toBe('live database')
+    expect(isLiveDatabaseFile(':memory:', ':memory:')).toBe(false)
+    expect(isLiveDatabaseFile(dbPath, join(ctx.tempDir, 'backup.db'))).toBe(false)
+  })
+
+  it('replaces an older backup only once the new one is written, leaving no temporary files', async () => {
+    const target = join(ctx.tempDir, 'backup.db')
+    writeFileSync(target, 'older backup')
+    // VACUUM can't run inside a transaction, so this backup fails.
+    ctx.db.exec('BEGIN')
+    ctx.desktop.savePath = target
+    await expect(exportBackup(ctx)).rejects.toMatchObject({ code: 'UNKNOWN' })
+    ctx.db.exec('ROLLBACK')
+    expect(readFileSync(target, 'utf8')).toBe('older backup')
+
+    await setApiKey(ctx, 'sk-ant-in-backup')
+    expect(await exportBackup(ctx)).toEqual({ path: target })
+    const copy = new DatabaseSync(target)
+    expect(copy.prepare("SELECT COUNT(*) AS n FROM settings WHERE key = 'apiKey'").get()).toEqual({ n: 1 })
+    copy.close()
+    expect(readdirSync(ctx.tempDir).filter((name) => name.endsWith('.tmp'))).toEqual([])
   })
 })

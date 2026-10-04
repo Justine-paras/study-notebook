@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite'
 import type { ID, PathStep, Topic } from '@shared/types'
-import { json, num, prepare, str, strOrNull, toJson, type Row } from '../sql'
+import { json, num, prepare, str, strOrNull, toJson, type NotebookScope, type Row } from '../sql'
 
 function toTopic(row: Row): Topic {
   return {
@@ -73,7 +73,34 @@ export function listTopicRows(db: DatabaseSync, notebookId: ID): Topic[] {
 
 /** Every topic of every notebook, grouped by notebook and in course order. */
 export function listAllTopicRows(db: DatabaseSync): Topic[] {
-  return prepare(db, 'SELECT * FROM topics ORDER BY notebook_id, order_index ASC, created_at ASC, rowid ASC').all().map(toTopic)
+  return listTopicRowsIn(db, 'all')
+}
+
+/** Topics of the notebooks `scope` covers, grouped by notebook and in course order. */
+export function listTopicRowsIn(db: DatabaseSync, scope: NotebookScope): Topic[] {
+  if (scope === 'all') {
+    return prepare(db, 'SELECT * FROM topics ORDER BY notebook_id, order_index ASC, created_at ASC, rowid ASC').all().map(toTopic)
+  }
+  if (scope === 'unarchived') {
+    return prepare(
+      db,
+      `SELECT t.* FROM topics t JOIN notebooks n ON n.id = t.notebook_id
+       WHERE n.archived = 0 ORDER BY t.notebook_id, t.order_index ASC, t.created_at ASC, t.rowid ASC`
+    )
+      .all()
+      .map(toTopic)
+  }
+  return listTopicRows(db, scope.notebookId)
+}
+
+/** Titles of the given topics (unknown ids are left out). */
+export function findTopicTitles(db: DatabaseSync, ids: ID[]): Map<ID, string> {
+  const titles = new Map<ID, string>()
+  if (ids.length === 0) return titles
+  for (const row of prepare(db, 'SELECT id, title FROM topics WHERE id IN (SELECT value FROM json_each(?))').all(JSON.stringify(ids))) {
+    titles.set(str(row, 'id'), str(row, 'title'))
+  }
+  return titles
 }
 
 export function nextTopicOrderIndex(db: DatabaseSync, notebookId: ID): number {

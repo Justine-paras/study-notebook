@@ -26,14 +26,16 @@ export const SYSTEM_PROMPT = `You are the tutor inside Study Notebook, a desktop
 
 # Formatting (every text field is Markdown)
 - Put code in fenced code blocks with a language tag (\`\`\`python, \`\`\`java, \`\`\`c, \`\`\`text for pseudocode). Use the language the course uses; default to Python when it isn't clear.
-- Write math as $...$ inline and $$...$$ on its own line (KaTeX syntax). Never use \\( \\) or \\[ \\].
+- Code must be correct for its language: if you state what code prints or returns, it is exactly what it would print or return.
+- Write math as $...$ inline and $$...$$ on its own line (KaTeX syntax). Never use \\( \\) or \\[ \\]. Use $ only for math; write a literal dollar sign as \\$.
 - Use short paragraphs, bullet lists and small tables where they make a comparison clearer. Don't add headings inside a field unless the task asks for them.
 
 # Questions (whenever a task asks for them)
 - Test understanding, not recall of wording: applying a rule, tracing code, predicting output, comparing approaches, spotting what goes wrong, analysing complexity, choosing the right tool.
+- Ask about the ideas, never about the documents themselves: no questions on page or slide numbers, the order the slides present things, authors, dates, course logistics or the exact wording of a sentence.
 - Every question must be answerable from the files (or, with no files, from the topic description and standard course material) and have exactly one defensible correct answer.
 - Multiple-choice distractors are plausible misconceptions a real student might hold, similar in length and style to the correct option. Never use "all of the above" or "none of the above".
-- Explanations say why the correct answer is right and why the tempting wrong answers are wrong.
+- Explanations (2-4 sentences) say why the correct answer is right and why the tempting wrong answers are wrong.
 
 # Output
 - Respond only with JSON that matches the provided schema; all content goes inside its fields.
@@ -78,11 +80,11 @@ const DIFFICULTY_RULE =
 
 function questionFormatRules(types: readonly QuestionType[]): string {
   const rules: Record<QuestionType, string> = {
-    mc: '- "mc" (multiple choice): 4 options (3-5 allowed) and "answer" copied character for character from one of them. Vary which position holds the correct option.',
-    tf: '- "tf" (true or false): "options" is exactly ["True", "False"] and "answer" is "True" or "False". The statement must be unambiguously true or false; aim for a mix of both answers.',
-    fill: '- "fill" (fill in the blank): "prompt" is a sentence containing ____ (four underscores) where one key term or short phrase is missing; "options" is []; "answer" is the missing text; "acceptable" lists other correct spellings or synonyms.',
+    mc: '- "mc" (multiple choice): 4 options (3-5 allowed) and "answer" copied character for character from one of them. Vary which position holds the correct option. Each distractor is a specific mistake a student makes (an off-by-one, the wrong complexity class, a related concept confused with this one), and the explanation says what that mistake is.',
+    tf: '- "tf" (true or false): "options" is exactly ["True", "False"] and "answer" is "True" or "False". The statement must be unambiguously true or false; aim for a mix of both answers. A false statement is false because of a real misconception, not a trick word, a negation or a double negative.',
+    fill: '- "fill" (fill in the blank): "prompt" is a sentence containing ____ (four underscores, in plain text, not inside code or math) where one key term, value or short phrase is missing; "options" is []; "answer" is the missing text; "acceptable" lists other correct spellings or synonyms. Pick a blank with one correct answer that takes understanding to fill (the result of a step, a complexity, the property that makes something work), not a sentence copied from the files.',
     identification:
-      '- "identification": "prompt" describes a concept, algorithm, structure or property and asks the student to name it; "options" is []; "answer" is the name; "acceptable" lists synonyms and abbreviations.'
+      '- "identification": "prompt" describes what something does, a situation where it applies, or a property that sets it apart (not its textbook definition reworded) and asks the student to name it; "options" is []; "answer" is the name; "acceptable" lists synonyms and abbreviations.'
   }
   return ['Question format:', ...types.map((t) => rules[t]), SOURCE_REF_RULE, DIFFICULTY_RULE].join('\n')
 }
@@ -90,6 +92,12 @@ function questionFormatRules(types: readonly QuestionType[]): string {
 // ---------------------------------------------------------------------------
 // Lesson
 // ---------------------------------------------------------------------------
+
+/** Lessons have no per-part sourceRef field, so each part names its sources at the end of its body. */
+function lessonSourceRule(sources: AiSourceDoc[]): string {
+  if (!sources.some((s) => s.text.trim())) return ''
+  return ` End each part's "body" with a line in italics naming the file and pages or slides it draws on, e.g. "*Source: Lecture 05 - Deadlocks.pdf, pages 3-6*". If a part adds material the files don't cover, say so on that line (e.g. "*Source: Week 3.pptx, slides 4-9; the proof is standard material, not in your files*").`
+}
 
 export function lessonInstruction(input: { notebookName: string; topic: TopicBrief; sources: AiSourceDoc[]; otherTopics: TopicBrief[] }): string {
   const { topic } = input
@@ -103,7 +111,7 @@ Topic: ${topic.title}${topic.unitLabel ? `\nUnit: ${topic.unitLabel}` : ''}${top
 Other topics in this notebook:
 ${others}
 
-${sourcesNote(input.sources)} Teach what the files say about this topic, in the course's own terms; use only the parts of the files that belong to this topic.
+${sourcesNote(input.sources)} Teach what the files say about this topic, in the course's own terms; use only the parts of the files that belong to this topic, but cover all of them: every definition, rule, algorithm, theorem, example and caveat the files give for this topic. If that is a lot, make the parts denser rather than leaving material out.${lessonSourceRule(input.sources)}
 
 Fields:
 - "title": the topic name as the student would recognise it.
@@ -112,7 +120,7 @@ Fields:
 - "chunks": 3 to 6 parts in teaching order, each about 3-5 minutes of reading (roughly 250-600 words in "body"). Each part covers one idea:
   - "heading": short and specific (not "Introduction").
   - "body": intuition first, then the precise definition or mechanism, why it works, and the misconception students most often have about it. Include code, tables or math where they help.
-  - "example": a worked example that applies this part's idea step by step with concrete values (a trace, a calculation, a small program and its output). Use "" only when an example truly would not help.
+  - "example": a worked example that applies this part's idea step by step with concrete values (a trace, a calculation, a small program and its output). When the files work an example for this idea, redo theirs in full; otherwise make one in the course's style. Use "" only when an example truly would not help.
   - "check": one "mc" or "tf" question that tests understanding of this part (apply, predict or explain), not its wording. It is answered before the student moves on, so it must be answerable from this part alone.
 - "keyTerms": 5-10 terms the student must know, each with a precise one- or two-sentence definition in the course's wording.
 - "connections": 1-4 short sentences on how this topic builds on or leads to the other topics listed above, naming them exactly. Use [] when none of them relate.
@@ -221,7 +229,7 @@ ${sourcesNote(input.sources)}
 Rules:
 - Up to ${input.count} cards, all different. Cover every key term and the core ideas of each lesson part: what things are, why they work, when to use them, how they compare, and their complexities where relevant.
 - "front": one question about exactly one fact or idea, answerable from memory without seeing options (e.g. "Why does binary search need a sorted array?", not "Binary search"). Avoid yes/no questions and questions whose answer is a list of more than 3 items.
-- "back": the short, complete answer (one to three sentences, or a tiny code snippet in a fenced block). Correct and self-contained.
+- "back": the short, complete answer (one to three sentences, or a tiny code snippet in a fenced block). Correct and self-contained, and specific enough that the student can tell whether what they recalled matches.
 - No two cards may ask for the same thing.
 ${SOURCE_REF_RULE}`
 }
@@ -264,13 +272,15 @@ ${input.explanation.trim()}
 
 ${sourcesNote(input.sources)} Check correctness against them.
 
-Grading:
-- Be strict about correctness and encouraging in tone, like a good teaching assistant.
+Grading (the Feynman test: could the student teach this to someone who has never seen it?):
+- Be strict about correctness and encouraging in tone, like a good teaching assistant. Speak to the student as "you".
+- Look for the gaps that show shaky understanding: a term used without saying what it means, a step skipped, saying what happens but not why, a definition recited with no example, a claim that is only half right.
+- Grade the understanding, not the wording or the length: accept correct ideas in the student's own words, a different valid example, or an equivalent convention.
 - "score" (0-100): how fully and correctly the explanation covers the rubric. Roughly: each rubric point fully and correctly explained earns its share; vague or partly right earns half; any misconception costs points. A short but correct explanation that covers everything scores high.
-- "covered": rubric points the student got right, as short phrases.
-- "missing": rubric points that are absent or too vague, as short phrases.
+- "covered": rubric points the student explained correctly, as short phrases.
+- "missing": each gap as a short phrase saying what the explanation doesn't do yet (e.g. "Doesn't say why the array must be sorted", "Uses \"amortised\" without explaining it"), covering absent or vague rubric points and the gaps above.
 - "misconceptions": statements in the explanation that are wrong, each as a short phrase that also gives the correction (e.g. "Says quicksort is always O(n log n): worst case is O(n^2)"). [] when there are none.
-- "suggestion": one concrete, specific thing to add or fix next (one or two sentences).
+- "suggestion": the single most useful next step, as something the student can do right now: what to explain again in plain words, ideally with a small example to work through (e.g. "Explain in plain words why each comparison halves the search, using [1, 3, 5, 7, 9] and target 7."). One or two sentences.
 - If the explanation is empty, off-topic or not a real attempt, score it low and say so kindly in "suggestion".`
 }
 

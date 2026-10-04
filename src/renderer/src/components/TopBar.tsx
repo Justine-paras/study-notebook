@@ -1,9 +1,13 @@
+import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router'
 import { Flame, Pause, Play, RotateCcw, Settings, SkipForward } from 'lucide-react'
+import { usePendingAiJobs } from '../lib/aiJobs'
 import { formatClock, formatMinutes } from '../lib/format'
 import { usePomodoro } from '../lib/pomodoro'
 import { useToday } from '../lib/queries'
+import { AI_TASK_TITLES } from './AiWorking'
 import { IconButton } from './ui/IconButton'
+import { Spinner } from './ui/Spinner'
 import './TopBar.css'
 
 type NavKey = 'today' | 'notebooks' | 'insights'
@@ -48,6 +52,46 @@ function Streak() {
         <span>Start a streak today</span>
       )}
     </div>
+  )
+}
+
+/**
+ * AI jobs keep running when the learner leaves their page (a lesson can take
+ * two minutes), so the top bar says one is still at work and links back to it.
+ */
+function AiJobsIndicator() {
+  const jobs = usePendingAiJobs()
+  const oldest = jobs[0]
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (!oldest) return
+    setNow(Date.now())
+    const id = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(id)
+  }, [oldest])
+  if (!oldest) return null
+
+  const text = jobs.length === 1 ? AI_TASK_TITLES[oldest.task] : `${jobs.length} AI tasks running`
+  const clock = formatClock(Math.max(0, Math.floor((now - oldest.startedAt) / 1000)))
+  const content = (
+    <>
+      <Spinner size={16} label={null} />
+      <span className="topbar__ai-text">{text}</span>
+      <span className="topbar__ai-time tabular" aria-hidden="true">
+        {clock}
+      </span>
+    </>
+  )
+  // The ticking clock stays out of the accessible name so it is not re-read every second.
+  const name = jobs.length === 1 ? `${text}: ${oldest.label}` : text
+  return oldest.href ? (
+    <Link to={oldest.href} className="topbar__ai" aria-label={`${name}. Show progress`} title={oldest.label}>
+      {content}
+    </Link>
+  ) : (
+    <span className="topbar__ai" role="status" aria-label={name} title={oldest.label}>
+      {content}
+    </span>
   )
 }
 
@@ -114,6 +158,7 @@ export function TopBar() {
         ))}
       </nav>
       <div className="topbar__spacer" />
+      <AiJobsIndicator />
       <Streak />
       <PomodoroWidget />
       <IconButton

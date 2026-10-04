@@ -1,6 +1,23 @@
 import type { DatabaseSync } from 'node:sqlite'
 import type { AnswerRecord, AnswerSource, Confidence, ID, QuestionType } from '@shared/types'
-import { bool, fromBool, prepare, str, strOrNull, type Row } from '../sql'
+import { bool, fromBool, prepare, str, strOrNull, type NotebookScope, type Row } from '../sql'
+
+/** What mastery and calibration read from an answer: no question or answer text, which is most of a row's size. */
+export type AnswerFact = Pick<AnswerRecord, 'id' | 'topicId' | 'cardId' | 'source' | 'correct' | 'confidence' | 'answeredAt'>
+
+const FACT_COLUMNS = 'a.id, a.topic_id, a.card_id, a.source, a.correct, a.confidence, a.answered_at'
+
+function toAnswerFact(row: Row): AnswerFact {
+  return {
+    id: str(row, 'id'),
+    topicId: strOrNull(row, 'topic_id'),
+    cardId: strOrNull(row, 'card_id'),
+    source: str(row, 'source') as AnswerSource,
+    correct: bool(row, 'correct'),
+    confidence: strOrNull(row, 'confidence') as Confidence | null,
+    answeredAt: str(row, 'answered_at')
+  }
+}
 
 function toAnswer(row: Row): AnswerRecord {
   return {
@@ -50,6 +67,28 @@ export function listTopicAnswers(db: DatabaseSync, notebookId: ID | null): Answe
   return rows.map(toAnswer)
 }
 
+/** Topic-linked answers for mastery, without their text, in no particular order. */
+export function listTopicAnswerFacts(db: DatabaseSync, scope: NotebookScope): AnswerFact[] {
+  const rows =
+    scope === 'all'
+      ? prepare(db, `SELECT ${FACT_COLUMNS} FROM answers a WHERE a.topic_id IS NOT NULL`).all()
+      : scope === 'unarchived'
+        ? prepare(
+            db,
+            `SELECT ${FACT_COLUMNS} FROM answers a JOIN notebooks n ON n.id = a.notebook_id
+             WHERE a.topic_id IS NOT NULL AND n.archived = 0`
+          ).all()
+        : prepare(db, `SELECT ${FACT_COLUMNS} FROM answers a WHERE a.notebook_id = ? AND a.topic_id IS NOT NULL`).all(scope.notebookId)
+  return rows.map(toAnswerFact)
+}
+
+/** Answers since `sinceIso` that carry a confidence rating, without their text (calibration). */
+export function listRatedAnswerFactsSince(db: DatabaseSync, sinceIso: string): AnswerFact[] {
+  return prepare(db, `SELECT ${FACT_COLUMNS} FROM answers a WHERE a.answered_at >= ? AND a.confidence IS NOT NULL`)
+    .all(sinceIso)
+    .map(toAnswerFact)
+}
+
 export function listAnswersForTopic(db: DatabaseSync, topicId: ID): AnswerRecord[] {
   return prepare(db, 'SELECT * FROM answers WHERE topic_id = ? ORDER BY answered_at ASC, rowid ASC').all(topicId).map(toAnswer)
 }
@@ -65,10 +104,4 @@ export function listRecentMistakes(db: DatabaseSync, limit: number): AnswerRecor
 
 export function listAnswersForQuiz(db: DatabaseSync, quizId: ID): AnswerRecord[] {
   return prepare(db, 'SELECT * FROM answers WHERE quiz_id = ? ORDER BY rowid ASC').all(quizId).map(toAnswer)
-}
-
-export function answerTimestampsSince(db: DatabaseSync, sinceIso: string): string[] {
-  return prepare(db, 'SELECT answered_at FROM answers WHERE answered_at >= ?')
-    .all(sinceIso)
-    .map((row) => str(row, 'answered_at'))
 }

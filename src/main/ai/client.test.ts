@@ -8,6 +8,7 @@ import {
   countKey,
   FALLBACK_BETA,
   mapAiError,
+  MODEL_MAX_OUTPUT_TOKENS,
   messageText,
   runStructured,
   TASK_MAX_TOKENS,
@@ -67,6 +68,20 @@ describe('buildMessageParams', () => {
     expect(p.model).toBe('claude-opus-5-5')
   })
 
+  it('never asks for more output than the model allows', () => {
+    const big = (model: AiModelId) =>
+      buildMessageParams({ task: 'lesson', model, instruction: 'x', sources: docs, schema: SUMMARY_JSON_SCHEMA, maxTokens: 500_000 }).max_tokens
+    expect(big('claude-opus-5-5')).toBe(MODEL_MAX_OUTPUT_TOKENS['claude-opus-5-5'])
+    expect(big('claude-haiku-4-5')).toBe(64_000)
+  })
+
+  it('leaves out the fallback opt-in when asked to', () => {
+    const p = buildMessageParams({ task: 'lesson', model: 'claude-opus-5-5', instruction: 'x', sources: docs, schema: SUMMARY_JSON_SCHEMA, maxTokens: 10, fallbacks: false })
+    expect(p).not.toHaveProperty('fallbacks')
+    expect(p).not.toHaveProperty('betas')
+    expect(p.output_config?.effort).toBe('high')
+  })
+
   it('caches the stable system prompt', () => {
     expect(params('claude-opus-5-5').system).toEqual([{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }])
     expect(SYSTEM_PROMPT).not.toMatch(/\d{4}-\d{2}-\d{2}/)
@@ -113,6 +128,8 @@ describe('mapAiError', () => {
     ['mid-stream overloaded', new Anthropic.APIError(undefined, body('overloaded_error'), undefined, headers, 'overloaded_error'), 'AI_UNAVAILABLE'],
     ['mid-stream rate limit', new Anthropic.APIError(undefined, body('rate_limit_error'), undefined, headers, 'rate_limit_error'), 'RATE_LIMITED'],
     ['aborted', new Anthropic.APIUserAbortError(), 'UNKNOWN'],
+    ['stream cut off mid-answer', new Anthropic.AnthropicError('terminated'), 'NETWORK'],
+    ['stream closed early', new Anthropic.AnthropicError('request ended without sending any chunks'), 'NETWORK'],
     ['plain error', new Error('weird'), 'UNKNOWN']
   ]
 

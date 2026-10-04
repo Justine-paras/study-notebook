@@ -12,6 +12,7 @@ import { chooseQuizTopics, validateQuizSettings } from '../../src/main/services/
 import { NO_FILES_LABEL } from '../../src/main/services/sourceBudget'
 import { createTestContext, type TestContext } from './helpers/context'
 import { FakeAi } from './helpers/fakeAi'
+import { failNextRemoval } from './helpers/fakeFiles'
 
 vi.mock('@shared/learning', () => import('./helpers/fakeLearning'))
 vi.mock('../../src/main/files/extract', () => import('./helpers/fakeFiles'))
@@ -136,6 +137,20 @@ describe('sources', () => {
     expect(existsSync(sources[0].storedPath)).toBe(false)
     expect(existsSync(join(ctx.paths.libraryDir, notebook.id))).toBe(false)
   })
+
+  it('reports a delete as done when Windows keeps the stored copy locked', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const { notebook } = await notebookWithTopics([])
+    const { sources } = await services.importSources(ctx, notebook.id, [{ path: writeFile('a.txt', 'text') }, { path: writeFile('b.txt', 'more') }])
+    failNextRemoval()
+    await expect(services.deleteSource(ctx, sources[0].id)).resolves.toBeUndefined()
+    expect(await services.listSources(ctx, notebook.id)).toHaveLength(1)
+    failNextRemoval()
+    await expect(services.deleteNotebook(ctx, notebook.id)).resolves.toBeUndefined()
+    expect(await services.listNotebooks(ctx)).toEqual([])
+    expect(warn).toHaveBeenCalledTimes(2)
+    warn.mockRestore()
+  })
 })
 
 describe('topics and syllabus', () => {
@@ -217,6 +232,8 @@ describe('learning path', () => {
     expect(jobIds.size).toBe(1)
     expect(ctx.progressEvents.map((e) => e.progress)).toEqual([0, 0.5, 1])
     expect(ctx.progressEvents.every((e) => e.task === 'lesson')).toBe(true)
+    // Each event names the topic, so lessons written for two topics at once keep their own progress.
+    expect(ctx.progressEvents.every((e) => e.subjectId === deadlocks.id)).toBe(true)
 
     expect((await services.generateLesson(ctx, deadlocks.id)).id).toBe(lesson.id)
     expect(ai.callsTo('generateLesson')).toHaveLength(1)
@@ -246,6 +263,13 @@ describe('learning path', () => {
     await expect(
       services.recordAnswer(ctx, { topicId: topic.id, source: 'practice' as never, question: warm1, response: 'x', confidence: null })
     ).rejects.toMatchObject({ code: 'INVALID_INPUT' })
+    // A question type nothing can grade, or an absurdly long prompt, is refused instead of logged.
+    for (const question of [{ ...warm1, type: 'essay' as never }, { ...warm1, prompt: 'x'.repeat(20_001) }, { ...warm1, prompt: '  ' }]) {
+      await expect(services.recordAnswer(ctx, { topicId: topic.id, source: 'check', question, response: 'x', confidence: null })).rejects.toMatchObject({
+        code: 'INVALID_INPUT'
+      })
+    }
+    expect(ctx.db.prepare('SELECT COUNT(*) AS n FROM answers').get()).toEqual({ n: 2 })
 
     await expect(services.gradeExplanation(ctx, topic.id, '   ')).rejects.toMatchObject({ code: 'INVALID_INPUT' })
     const feedback = await services.gradeExplanation(ctx, topic.id, 'A deadlock is when processes wait forever.')
@@ -409,6 +433,31 @@ describe('quizzes', () => {
     await expect(services.getQuiz(ctx, quiz.id)).rejects.toMatchObject({ code: 'NOT_FOUND' })
     expect(ctx.db.prepare('SELECT COUNT(*) AS n FROM answers').get()).toEqual({ n: 3 })
   })
+
+  it('brings an existing card back when its question is missed again, instead of leaving it weeks away', async () => {
+    const { notebook, topics } = await notebookWithTopics(['Deadlocks'])
+    await services.importSources(ctx, notebook.id, [{ path: writeFile('Lecture.md', 'Deadlocks') }])
+    const input = { notebookId: notebook.id, topicId: topics[0].id, kind: 'practice' as const, settings: { ...practiceSettings, count: 3 }, topicIds: [] }
+    const first = await services.createQuiz(ctx, input)
+    expect((await services.submitQuiz(ctx, first.id)).cardsCreated).toBe(3)
+    const [c1, c2, c3] = await services.listCards(ctx, notebook.id)
+    for (const card of [c1, c2, c3]) await services.reviewCard(ctx, { cardId: card.id, rating: 4, confidence: 'sure', response: '' })
+    const setAside = await services.updateCard(ctx, c3.id, { suspended: true })
+    const later = new Date(NOW.getTime() + 60_000)
+    ctx.setNow(later)
+
+    // The fake AI asks the same questions again: q1 missed plainly, q2 missed while sure, q3 (suspended card) missed.
+    const second = await services.createQuiz(ctx, input)
+    await services.saveQuizAnswer(ctx, second.id, { questionId: second.questions[1].id, response: 'False', confidence: 'sure' })
+    expect((await services.submitQuiz(ctx, second.id)).cardsCreated).toBe(0)
+    const after = new Map((await services.listCards(ctx, notebook.id)).map((c) => [c.id, c]))
+    expect(after.get(c1.id)?.due).toBe(later.toISOString())
+    expect(after.get(c2.id)?.due).toBe(new Date(later.getTime() - 24 * 60 * 60 * 1000).toISOString())
+    expect(after.get(c3.id)?.due).toBe(setAside.due)
+    expect(setAside.due > later.toISOString()).toBe(true)
+    // Only the due date moved: the memory state is kept for FSRS.
+    expect(after.get(c1.id)).toMatchObject({ reps: 1, state: 'review' })
+  })
 })
 
 describe('chooseQuizTopics', () => {
@@ -479,6 +528,12 @@ describe('notes, exams and focus', () => {
     const { notebook, topics } = await notebookWithTopics(['A'])
     const note = await services.createNote(ctx, { notebookId: notebook.id, topicId: topics[0].id, title: '', body: '# Hi' })
     expect(note).toMatchObject({ title: 'Untitled note', kind: 'note' })
+    expect(await services.listNotes(ctx, notebook.id, null as never)).toHaveLength(1)
+    // A topic filter that isn't an id is an input error, not a SQLite binding error.
+    for (const bad of [{}, [], 5, true]) {
+      await expect(services.listNotes(ctx, notebook.id, bad as never)).rejects.toMatchObject({ code: 'INVALID_INPUT' })
+      await expect(services.listCards(ctx, notebook.id, bad as never)).rejects.toMatchObject({ code: 'INVALID_INPUT' })
+    }
     ctx.setNow(new Date(NOW.getTime() + 60_000))
     expect(await services.updateNote(ctx, note.id, { body: 'Edited' })).toMatchObject({ body: 'Edited', updatedAt: new Date(NOW.getTime() + 60_000).toISOString() })
 

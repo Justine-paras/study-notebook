@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { ArrowRight, RefreshCw } from 'lucide-react'
 import type { ID, QuizResult, TopicWithProgress } from '@shared/types'
-import { useApiMutation, useQuiz, useQuizResult, useQuizzes } from '../../lib/queries'
+import { useAiAction } from '../../lib/aiJobs'
+import { useQuiz, useQuizResult, useQuizzes } from '../../lib/queries'
+import { ROUTES } from '../../lib/routes'
 import { AiWorking } from '../AiWorking'
 import { ErrorNotice } from '../ErrorNotice'
 import { QuizResults } from '../quiz/QuizResults'
@@ -27,7 +29,12 @@ export function PracticeStep({ topic, onContinue }: PracticeStepProps) {
   const [chosenQuizId, setChosenQuizId] = useState<ID | null>(null)
   const [wantsNew, setWantsNew] = useState(false)
   const [result, setResult] = useState<QuizResult | null>(null)
-  const create = useApiMutation('createQuiz', {
+  // A job: writing questions takes a minute or two and must survive leaving the page.
+  // When it finishes elsewhere, the topic's newest practice quiz is the new one.
+  const create = useAiAction('createQuiz', `practice:${topic.id}`, {
+    task: 'quiz',
+    label: `Practice questions on ${topic.title}`,
+    href: ROUTES.topic(topic.id, 'practice'),
     onSuccess: (quiz) => {
       setChosenQuizId(quiz.id)
       setWantsNew(false)
@@ -44,10 +51,10 @@ export function PracticeStep({ topic, onContinue }: PracticeStepProps) {
   const shownResult = result?.quiz.id === quizId ? result : (storedResult.data ?? null)
 
   const generate = (settings = latest?.settings ?? DEFAULT_PRACTICE_SETTINGS) =>
-    create.mutate([{ notebookId: topic.notebookId, topicId: topic.id, kind: 'practice', settings: { ...settings, timeLimitMin: null }, topicIds: [] }])
+    create.run({ notebookId: topic.notebookId, topicId: topic.id, kind: 'practice', settings: { ...settings, timeLimitMin: null }, topicIds: [] })
 
   if (create.isPending) {
-    return <AiWorking task="quiz" title={`Writing practice questions on ${topic.title}`} />
+    return <AiWorking task="quiz" title={`Writing practice questions on ${topic.title}`} startedAt={create.job?.startedAt} subjectId={topic.id} />
   }
 
   if (quizzes.isPending || (quizId && quiz.isPending)) return <LoadingBlock label="Opening your practice…" />
@@ -70,9 +77,15 @@ export function PracticeStep({ topic, onContinue }: PracticeStepProps) {
             initial={latest?.settings ?? DEFAULT_PRACTICE_SETTINGS}
             onSubmit={generate}
             pending={create.isPending}
-            note="Takes up to a minute to write."
+            note="Takes a minute or two to write."
           />
-          <ErrorNotice error={create.error} onRetry={() => generate()} title="Your questions couldn't be written" />
+          <ErrorNotice
+            error={create.error}
+            onRetry={() => generate()}
+            onDismiss={create.dismiss}
+            addFilesTo={ROUTES.notebook(topic.notebookId)}
+            title="Your questions couldn't be written"
+          />
           {latest && wantsNew && (
             <div>
               <Button variant="ghost" onClick={() => setWantsNew(false)}>

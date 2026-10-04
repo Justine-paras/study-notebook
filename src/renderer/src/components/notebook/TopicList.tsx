@@ -37,7 +37,8 @@ export function TopicList({ notebook, topics, sources, syllabus, onAddTopic, onE
   const topicsKey = queryKeys.topics(notebook.id)
 
   const reorder = useApiMutation('reorderTopics', {
-    invalidate: [topicsKey],
+    // Today's "next topic to learn" follows the course order.
+    invalidate: [topicsKey, queryKeys.today()],
     onError: (err) => {
       toast.error(err, "Couldn't save the new order")
       void queryClient.invalidateQueries({ queryKey: topicsKey })
@@ -99,7 +100,7 @@ export function TopicList({ notebook, topics, sources, syllabus, onAddTopic, onE
   }
 
   const showUnits = list.some((t) => t.unitLabel !== '')
-  const syllabusRunning = syllabus.mutation.isPending
+  const syllabusRunning = syllabus.job.isPending
   const hasCandidates = syllabusCandidates(sources).length > 0
 
   return (
@@ -142,15 +143,15 @@ export function TopicList({ notebook, topics, sources, syllabus, onAddTopic, onE
           task="syllabus"
           title={syllabus.fileName ? `Finding topics in ${syllabus.fileName}` : undefined}
           compact={list.length > 0}
+          startedAt={syllabus.job.job?.startedAt}
+          subjectId={notebook.id}
         />
       )}
       <ErrorNotice
-        error={syllabus.mutation.error}
-        title="Couldn't read the syllabus"
-        onRetry={() => {
-          const source = sources.find((s) => s.id === syllabus.mutation.variables?.[1])
-          if (source) syllabus.run(source)
-        }}
+        error={syllabus.job.error}
+        title={syllabus.fileName ? `Couldn't read ${syllabus.fileName}` : "Couldn't read the syllabus"}
+        onRetry={syllabus.job.retry}
+        onDismiss={syllabus.job.dismiss}
       />
 
       {topics.isPending ? (

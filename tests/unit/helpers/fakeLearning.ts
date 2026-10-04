@@ -60,6 +60,10 @@ export function newCardSchedule(now: Date): CardSchedule {
   }
 }
 
+export function isRecalledRating(rating: Rating): boolean {
+  return rating >= 2
+}
+
 export function adjustRatingForConfidence(rating: Rating, confidence: Confidence | null): Rating {
   return confidence === 'guess' && rating >= 3 ? 2 : rating
 }

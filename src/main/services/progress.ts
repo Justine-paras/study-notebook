@@ -3,15 +3,16 @@
 // of a round of queries per topic.
 
 import { computeTopicProgress, examReadiness, localDate } from '@shared/learning'
-import type { AnswerRecord, Card, Exam, ID, Notebook, NotebookSummary, ReviewLog, Topic, TopicWithProgress } from '@shared/types'
+import type { Card, Exam, ID, Notebook, NotebookSummary, ReviewLog, Topic, TopicWithProgress } from '@shared/types'
 import type { AppContext } from '../context'
 import { lastStudiedByNotebook } from '../db/repositories/activity'
-import { listTopicAnswers } from '../db/repositories/answers'
+import { listTopicAnswerFacts, type AnswerFact } from '../db/repositories/answers'
 import { countDueCardsByNotebook, listActiveTopicCards } from '../db/repositories/cards'
 import { listUpcomingExamRows } from '../db/repositories/exams'
-import { listReviewLogs } from '../db/repositories/reviewLogs'
+import { listReviewLogsIn } from '../db/repositories/reviewLogs'
 import { countSourcesByNotebook } from '../db/repositories/sources'
-import { listAllTopicRows, listTopicRows } from '../db/repositories/topics'
+import { listTopicRowsIn } from '../db/repositories/topics'
+import type { NotebookScope } from '../db/sql'
 
 function groupBy<T>(items: T[], key: (item: T) => ID | null): Map<ID, T[]> {
   const groups = new Map<ID, T[]>()
@@ -26,7 +27,7 @@ function groupBy<T>(items: T[], key: (item: T) => ID | null): Map<ID, T[]> {
 }
 
 /** Attaches progress to `topics` using pre-loaded answers, cards and review logs. */
-export function withProgress(topics: Topic[], answers: AnswerRecord[], cards: Card[], reviews: ReviewLog[], now: Date): TopicWithProgress[] {
+export function withProgress(topics: Topic[], answers: AnswerFact[], cards: Card[], reviews: ReviewLog[], now: Date): TopicWithProgress[] {
   const answersByTopic = groupBy(answers, (a) => a.topicId)
   const cardsByTopic = groupBy(cards, (c) => c.topicId)
   const reviewsByCard = groupBy(reviews, (r) => r.cardId)
@@ -44,23 +45,29 @@ export function withProgress(topics: Topic[], answers: AnswerRecord[], cards: Ca
   })
 }
 
-/** Topics of one notebook, in course order, with progress. */
-export function loadNotebookTopics(ctx: AppContext, notebookId: ID): TopicWithProgress[] {
+function loadTopics(ctx: AppContext, scope: NotebookScope): TopicWithProgress[] {
   const { db } = ctx
   return withProgress(
-    listTopicRows(db, notebookId),
-    listTopicAnswers(db, notebookId),
-    listActiveTopicCards(db, notebookId),
-    listReviewLogs(db, notebookId),
+    listTopicRowsIn(db, scope),
+    listTopicAnswerFacts(db, scope),
+    listActiveTopicCards(db, scope),
+    listReviewLogsIn(db, scope),
     ctx.now()
   )
 }
 
-/** Every topic of every notebook, with progress, grouped by notebook id (each in course order). */
-export function loadAllTopicsByNotebook(ctx: AppContext): Map<ID, TopicWithProgress[]> {
-  const { db } = ctx
-  const topics = withProgress(listAllTopicRows(db), listTopicAnswers(db, null), listActiveTopicCards(db, null), listReviewLogs(db, null), ctx.now())
-  return groupBy(topics, (t) => t.notebookId)
+/** Topics of one notebook, in course order, with progress. */
+export function loadNotebookTopics(ctx: AppContext, notebookId: ID): TopicWithProgress[] {
+  return loadTopics(ctx, { notebookId })
+}
+
+/**
+ * Topics with progress, grouped by notebook id (each in course order). Today
+ * and Insights pass 'unarchived': archived subjects stay out of both, so their
+ * whole history needn't be loaded on every refresh.
+ */
+export function loadAllTopicsByNotebook(ctx: AppContext, scope: 'unarchived' | 'all' = 'all'): Map<ID, TopicWithProgress[]> {
+  return groupBy(loadTopics(ctx, scope), (t) => t.notebookId)
 }
 
 /** True when the learner has answered or reviewed anything for this topic. */
@@ -68,9 +75,14 @@ export function hasProgressData(topic: TopicWithProgress): boolean {
   return topic.progress.answeredCount > 0 || topic.progress.lastPracticedAt !== null
 }
 
-/** Weak by state, or below 60% mastery with evidence behind it. */
+/**
+ * Weak by state, or below 60% mastery with accuracy evidence behind it (at
+ * least 3 scored answers or reviews). The evidence matters: a topic someone
+ * has only warmed up on, or is part way through learning, has a low mastery
+ * from its path alone (at most 10%), and is not weak.
+ */
 export function isWeakTopic(topic: TopicWithProgress): boolean {
-  return topic.progress.state === 'weak' || (topic.progress.mastery < 60 && hasProgressData(topic))
+  return topic.progress.state === 'weak' || (topic.progress.mastery < 60 && topic.progress.recentAccuracy !== null)
 }
 
 /** Mean mastery where not-started topics count as 0. */

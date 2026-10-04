@@ -268,10 +268,15 @@ export function useApiMutation<M extends StudyApiMethod>(
 }
 
 export function invalidateAfterMutation(queryClient: QueryClient, target: InvalidateTarget): void {
-  if (target === 'none') return
-  if (target === 'all') {
-    void queryClient.invalidateQueries()
-    return
-  }
-  for (const queryKey of target) void queryClient.invalidateQueries({ queryKey })
+  void refetchAfterMutation(queryClient, target)
+}
+
+/**
+ * Same as invalidateAfterMutation, but resolves once the screens' queries
+ * have their new data (refetch errors don't reject: the queries show them).
+ */
+export function refetchAfterMutation(queryClient: QueryClient, target: InvalidateTarget): Promise<void> {
+  if (target === 'none') return Promise.resolve()
+  if (target === 'all') return queryClient.invalidateQueries()
+  return Promise.all(target.map((queryKey) => queryClient.invalidateQueries({ queryKey }))).then(() => undefined)
 }

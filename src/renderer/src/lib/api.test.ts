@@ -39,6 +39,19 @@ describe('api client', () => {
     expect(apiError.retryable).toBe(false)
   })
 
+  it("shows the main process's own sentence for refusals, oversized requests and invalid input", async () => {
+    const refusal = 'The AI declined this request because it touches on security. Try fewer files.'
+    installBridge(async () => ({ ok: false, error: { code: 'AI_REFUSED', message: refusal } }))
+    expect(((await api.generateLesson('t1').catch((e: unknown) => e)) as ApiError).friendly).toBe(refusal)
+    installBridge(async () => ({ ok: false, error: { code: 'INVALID_INPUT', message: 'Add topics to this notebook before making a quiz.' } }))
+    expect(((await api.listNotebooks().catch((e: unknown) => e)) as ApiError).friendly).toBe('Add topics to this notebook before making a quiz.')
+    // An empty message falls back to the generic text; other codes keep it too.
+    installBridge(async () => ({ ok: false, error: { code: 'SOURCE_TOO_LARGE', message: ' ' } }))
+    expect(((await api.listNotebooks().catch((e: unknown) => e)) as ApiError).friendly).toBe(ERROR_MESSAGES.SOURCE_TOO_LARGE)
+    installBridge(async () => ({ ok: false, error: { code: 'AI_BAD_OUTPUT', message: 'The AI service rejected the request: max_tokens' } }))
+    expect(((await api.listNotebooks().catch((e: unknown) => e)) as ApiError).friendly).toBe(ERROR_MESSAGES.AI_BAD_OUTPUT)
+  })
+
   it('uses the UNKNOWN text for codes it does not know', async () => {
     installBridge(async () => ({ ok: false, error: { code: 'SQLITE_BUSY', message: 'database is locked' } }))
     const err = (await api.listNotebooks().catch((e: unknown) => e)) as ApiError

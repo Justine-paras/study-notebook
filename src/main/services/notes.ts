@@ -4,7 +4,7 @@ import type { ID, Note } from '@shared/types'
 import type { AppContext } from '../context'
 import { findTopic } from '../db/repositories/topics'
 import { deleteNoteRow, findNote, insertNote, listNoteRows, updateNoteRow } from '../db/repositories/notes'
-import { invalid, newId, notFound, nowIso, optionalText, requireNotebook } from './common'
+import { invalid, newId, notFound, nowIso, optionalId, optionalText, requireNotebook } from './common'
 
 const TITLE_MAX = 200
 const BODY_MAX = 200_000
@@ -26,7 +26,7 @@ function requireTopicInNotebook(ctx: AppContext, notebookId: ID, topicId: unknow
 
 export async function listNotes(ctx: AppContext, notebookId: ID, topicId?: ID): Promise<Note[]> {
   requireNotebook(ctx, notebookId)
-  return listNoteRows(ctx.db, notebookId, topicId ?? undefined)
+  return listNoteRows(ctx.db, notebookId, optionalId(topicId, 'Topic'))
 }
 
 export async function createNote(ctx: AppContext, input: { notebookId: ID; topicId: ID | null; title: string; body: string }): Promise<Note> {

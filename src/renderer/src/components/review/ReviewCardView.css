@@ -23,8 +23,11 @@
   gap: var(--space-2);
 }
 
+/* Each new card turns in like the next index card in a stack. */
 .review-card__sheet {
   gap: 18px;
+  transform-origin: 0 50%;
+  animation: review-card-in 320ms var(--ease);
 }
 
 .review-card__front {
@@ -55,8 +58,10 @@
   line-height: 1.5;
 }
 
+/* Revealing flips the answer over from its top edge, like turning the card. */
 .review-card__reveal {
-  animation: review-card-reveal var(--dur-slow) var(--ease);
+  transform-origin: 50% 0;
+  animation: review-card-flip 440ms var(--ease) both;
 }
 
 .review-card .review-card__back {
@@ -76,10 +81,24 @@
   animation: review-card-nudge var(--dur-slow) var(--ease);
 }
 
-@keyframes review-card-reveal {
+@keyframes review-card-flip {
+  0% {
+    opacity: 0;
+    transform: perspective(900px) rotateX(-82deg);
+  }
+  45% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+    transform: perspective(900px) rotateX(0);
+  }
+}
+
+@keyframes review-card-in {
   from {
     opacity: 0;
-    transform: translateY(6px);
+    transform: perspective(1400px) rotateY(-9deg) translateX(14px);
   }
   to {
     opacity: 1;

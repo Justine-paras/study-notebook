@@ -1,6 +1,6 @@
 // Flashcards and spaced-repetition reviews.
 
-import { adjustRatingForConfidence, applyRating, interleaveByNotebook, newCardSchedule, previewRatings } from '@shared/learning'
+import { adjustRatingForConfidence, applyRating, interleaveByNotebook, isRecalledRating, newCardSchedule, previewRatings } from '@shared/learning'
 import type { Card, CardOrigin, CardSchedule, ID, Notebook, Rating, ReviewCard, ReviewLog } from '@shared/types'
 import type { ReviewInput } from '@shared/api'
 import type { AppContext } from '../context'
@@ -17,9 +17,21 @@ import {
 } from '../db/repositories/cards'
 import { findNotebook, listNotebookRows } from '../db/repositories/notebooks'
 import { insertReviewLog } from '../db/repositories/reviewLogs'
-import { findTopic, listAllTopicRows } from '../db/repositories/topics'
+import { findTopic, findTopicTitles } from '../db/repositories/topics'
 import { transaction } from '../db/sql'
-import { cardKey, invalid, newId, notFound, nowIso, optionalText, requireConfidence, requireNotebook, requireText, scheduleOf } from './common'
+import {
+  cardKey,
+  invalid,
+  newId,
+  notFound,
+  nowIso,
+  optionalId,
+  optionalText,
+  requireConfidence,
+  requireNotebook,
+  requireText,
+  scheduleOf
+} from './common'
 import { readStoredSettings } from './settings'
 
 const FRONT_MAX = 2_000
@@ -34,27 +46,35 @@ export interface NewCardInput {
 /**
  * Inserts cards for one topic (or the notebook's topic-less cards when
  * `topicId` is null), skipping any whose normalised front already exists
- * there or earlier in the batch. Call inside a transaction.
+ * there or earlier in the batch. `onExisting` is told about each input that
+ * matched a card already stored. Call inside a transaction.
  */
 export function insertDedupedCards(
   ctx: AppContext,
   target: { notebookId: ID; topicId: ID | null; origin: CardOrigin },
   inputs: NewCardInput[],
-  scheduleFor: (input: NewCardInput) => CardSchedule
+  scheduleFor: (input: NewCardInput) => CardSchedule,
+  onExisting?: (card: Card, input: NewCardInput) => void
 ): Card[] {
   const existing =
     target.topicId !== null
       ? listCardsForTopic(ctx.db, target.topicId)
       : listCardRows(ctx.db, target.notebookId).filter((c) => c.topicId === null)
-  const seen = new Set(existing.map((c) => cardKey(c.front)))
+  // null marks a front first seen earlier in this batch.
+  const seen = new Map<string, Card | null>(existing.map((c) => [cardKey(c.front), c]))
   const createdAt = nowIso(ctx)
   const created: Card[] = []
   for (const input of inputs) {
     const front = input.front.trim()
     const back = input.back.trim()
     const key = cardKey(front)
-    if (!front || !back || !key || seen.has(key)) continue
-    seen.add(key)
+    if (!front || !back || !key) continue
+    if (seen.has(key)) {
+      const stored = seen.get(key)
+      if (stored) onExisting?.(stored, input)
+      continue
+    }
+    seen.set(key, null)
     const card: Card = {
       ...scheduleFor(input),
       id: newId(),
@@ -121,9 +141,7 @@ export async function getReviewQueue(
 function toReviewCards(ctx: AppContext, cards: Card[], now: Date, retention: number): ReviewCard[] {
   if (cards.length === 0) return []
   const notebooks = new Map<ID, Notebook>(listNotebookRows(ctx.db).map((n) => [n.id, n]))
-  const topicIds = new Set(cards.map((c) => c.topicId).filter((id): id is ID => id !== null))
-  const topicTitles = new Map<ID, string>()
-  if (topicIds.size > 0) for (const t of listAllTopicRows(ctx.db)) if (topicIds.has(t.id)) topicTitles.set(t.id, t.title)
+  const topicTitles = findTopicTitles(ctx.db, [...new Set(cards.map((c) => c.topicId).filter((id): id is ID => id !== null))])
   return cards.map((card) => {
     const notebook = notebooks.get(card.notebookId)
     return {
@@ -164,7 +182,7 @@ export async function reviewCard(ctx: AppContext, input: ReviewInput): Promise<C
       prompt: card.front,
       userAnswer: response,
       correctAnswer: card.back,
-      correct: rating >= 2,
+      correct: isRecalledRating(rating),
       confidence,
       answeredAt: reviewedAt
     })
@@ -174,7 +192,7 @@ export async function reviewCard(ctx: AppContext, input: ReviewInput): Promise<C
 
 export async function listCards(ctx: AppContext, notebookId: ID, topicId?: ID): Promise<Card[]> {
   requireNotebook(ctx, notebookId)
-  return listCardRows(ctx.db, notebookId, topicId ?? undefined)
+  return listCardRows(ctx.db, notebookId, optionalId(topicId, 'Topic'))
 }
 
 export async function createCard(ctx: AppContext, input: { notebookId: ID; topicId: ID | null; front: string; back: string }): Promise<Card> {

@@ -13,15 +13,17 @@ export interface LessonStartProps {
   topic: TopicWithProgress
   onGenerate: () => void
   pending: boolean
+  /** When the running job started (keeps the clock right after leaving and coming back). */
+  startedAt?: number
   error: unknown
 }
 
 /** First visit to a topic: what the lesson will be built from, and "Create my lesson". */
-export function LessonStart({ topic, onGenerate, pending, error }: LessonStartProps) {
+export function LessonStart({ topic, onGenerate, pending, startedAt, error }: LessonStartProps) {
   const sources = useSources(topic.notebookId)
 
   if (pending) {
-    return <AiWorking task="lesson" title={`Writing your lesson on ${topic.title}`} />
+    return <AiWorking task="lesson" title={`Writing your lesson on ${topic.title}`} startedAt={startedAt} subjectId={topic.id} />
   }
 
   const files = sources.data ? lessonSourcesPreview(topic, sources.data) : []
@@ -32,7 +34,7 @@ export function LessonStart({ topic, onGenerate, pending, error }: LessonStartPr
     <Sheet raised density="roomy" kicker="a fresh page" title="Create my lesson" className="lesson-start">
       <p className="lesson-start__text">
         Your lesson is written from your own files, in small parts. Each part ends with a quick check, and the topic starts with
-        two warm-up guesses. Writing it takes about a minute.
+        two warm-up guesses. Writing it takes a minute or two, and you can keep using the app meanwhile.
       </p>
 
       {sources.isPending ? (
@@ -63,7 +65,12 @@ export function LessonStart({ topic, onGenerate, pending, error }: LessonStartPr
         </Callout>
       )}
 
-      <ErrorNotice error={error} onRetry={onGenerate} title="Your lesson couldn't be written" />
+      <ErrorNotice
+        error={error}
+        onRetry={onGenerate}
+        addFilesTo={ROUTES.notebook(topic.notebookId)}
+        title="Your lesson couldn't be written"
+      />
 
       <div className="lesson-start__actions">
         <Button size="lg" icon={<Sparkles size={18} aria-hidden="true" />} onClick={onGenerate} disabled={!canGenerate && !sources.isPending}>

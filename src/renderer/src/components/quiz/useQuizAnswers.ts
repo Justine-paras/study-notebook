@@ -4,8 +4,10 @@
 // finish before submitQuiz.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import type { Confidence, ID, Quiz } from '@shared/types'
 import { api, toApiError, type ApiError } from '../../lib/api'
+import { queryKeys } from '../../lib/queries'
 import { draftsFromQuiz, EMPTY_DRAFT, sameDraft, type DraftAnswer, type DraftMap } from './quizModel'
 
 const TYPING_SAVE_DELAY_MS = 700
@@ -26,6 +28,7 @@ export interface QuizAnswers {
 
 export function useQuizAnswers(quiz: Pick<Quiz, 'id' | 'answers'>): QuizAnswers {
   const quizId = quiz.id
+  const queryClient = useQueryClient()
   // Refs hold the truth (async saves read them); state mirrors drafts for rendering.
   const draftsRef = useRef<Record<ID, DraftAnswer>>(draftsFromQuiz(quiz))
   const savedRef = useRef<Record<ID, DraftAnswer>>(draftsFromQuiz(quiz))
@@ -51,8 +54,11 @@ export function useQuizAnswers(quiz: Pick<Quiz, 'id' | 'answers'>): QuizAnswers 
         inFlightRef.current++
         setStatus('saving')
         try {
-          await api.saveQuizAnswer(quizId, { questionId, response: draft.response, confidence: draft.confidence })
+          const saved = await api.saveQuizAnswer(quizId, { questionId, response: draft.response, confidence: draft.confidence })
           savedRef.current[questionId] = draft
+          // The runner reads answers from the cached quiz once, when it mounts: keep that copy
+          // current, or leaving the quiz and coming back would show these answers as missing.
+          queryClient.setQueryData<Quiz>(queryKeys.quiz(quizId), saved)
         } finally {
           inFlightRef.current--
         }
@@ -70,7 +76,7 @@ export function useQuizAnswers(quiz: Pick<Quiz, 'id' | 'answers'>): QuizAnswers 
       )
       return attempt
     },
-    [quizId]
+    [quizId, queryClient]
   )
 
   const update = useCallback(

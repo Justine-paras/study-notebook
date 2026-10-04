@@ -20,7 +20,7 @@ import {
 } from '../db/repositories/sources'
 import { listTopicRows, updateTopicRow } from '../db/repositories/topics'
 import { transaction } from '../db/sql'
-import { invalid, newId, notFound, nowIso, requireNotebook, runAiJob } from './common'
+import { invalid, newId, notFound, nowIso, removeStoredFiles, requireNotebook, runAiJob } from './common'
 import { selectSources } from './sourceBudget'
 
 function requireSource(ctx: AppContext, id: ID): Source {
@@ -79,7 +79,9 @@ export async function importSources(ctx: AppContext, notebookId: ID, files: Impo
     try {
       stored = await copyIntoLibrary(ctx.paths.libraryDir, notebookId, path)
     } catch (err) {
-      result.failed.push({ path, reason: `Couldn't copy the file: ${errorMessage(err)}` })
+      // copyIntoLibrary's own errors (missing, too large, locked, disk full) are complete sentences.
+      const reason = err instanceof AppError ? err.message : `Couldn't copy the file: ${errorMessage(err)}`
+      result.failed.push({ path, reason })
       continue
     }
     // The notebook may have been deleted while the copy was in flight.
@@ -145,7 +147,7 @@ export async function deleteSource(ctx: AppContext, id: ID): Promise<void> {
     }
     deleteSourceRow(ctx.db, id)
   })
-  await removeFromLibrary(source.storedPath)
+  await removeStoredFiles(() => removeFromLibrary(source.storedPath), source.fileName)
 }
 
 export async function getSourceText(ctx: AppContext, id: ID): Promise<SourceText> {
@@ -163,7 +165,7 @@ export async function summarizeSource(ctx: AppContext, id: ID): Promise<Note> {
   // A summary covers the whole file, so with no topic to rank by, the cut keeps the opening pages.
   const selection = selectSources([{ id, fileName: source.fileName, kind: source.kind, text }], { titles: [], descriptions: [] })
   const doc = selection.docs[0]
-  const result = await runAiJob(ctx, 'summary', `Summarizing ${source.fileName}`, (options) =>
+  const result = await runAiJob(ctx, { task: 'summary', subjectId: source.id }, `Summarizing ${source.fileName}`, (options) =>
     ctx.ai.summarizeSource({ notebookName: notebook.name, source: doc }, options)
   )
 

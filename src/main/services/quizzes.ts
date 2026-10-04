@@ -25,6 +25,7 @@ import { listUpcomingExamRows } from '../db/repositories/exams'
 import { deleteQuizRow, findQuizRecord, insertQuiz, listQuizRows, recentQuizPrompts, updateQuizProgress, type QuizRecord } from '../db/repositories/quizzes'
 import { listTopicRows } from '../db/repositories/topics'
 import { transaction } from '../db/sql'
+import { updateCardRow } from '../db/repositories/cards'
 import { insertDedupedCards, type NewCardInput } from './cards'
 import { DAY_MS, invalid, newId, notFound, nowIso, optionalText, requireConfidence, requireIdList, requireNotebook, runAiJob, topicBrief } from './common'
 import { hasProgressData as hasData, isWeakTopic, loadNotebookTopics } from './progress'
@@ -207,7 +208,7 @@ export async function createQuiz(ctx: AppContext, input: CreateQuizInput): Promi
     weakFocus,
     avoidPrompts: recentQuizPrompts(ctx.db, notebook.id, AVOID_PROMPTS_FROM_QUIZZES)
   }
-  const generated = await runAiJob(ctx, 'quiz', kind === 'mock_exam' ? 'Writing your mock exam' : 'Writing your questions', (options) =>
+  const generated = await runAiJob(ctx, { task: 'quiz', subjectId: topicId ?? notebook.id }, kind === 'mock_exam' ? 'Writing your mock exam' : 'Writing your questions', (options) =>
     ctx.ai.generateQuestions(request, options)
   )
 
@@ -366,14 +367,20 @@ export async function submitQuiz(ctx: AppContext, id: ID): Promise<QuizResult> {
     let created = 0
     for (const [topicId, mistakes] of mistakesByTopic) {
       const overconfidentFronts = new Set(mistakes.filter((m) => m.overconfident).map((m) => m.input.front))
+      // "Sure but wrong" cards come back first: due a day earlier sorts them ahead in the most-overdue-first queue.
+      const dueFor = (input: NewCardInput): string =>
+        overconfidentFronts.has(input.front) ? new Date(now.getTime() - DAY_MS).toISOString() : now.toISOString()
       const cards = insertDedupedCards(
         ctx,
         { notebookId: quiz.notebookId, topicId, origin: 'mistake' },
         mistakes.map((m) => m.input),
-        (input) => {
-          const schedule = newCardSchedule(now)
-          // "Sure but wrong" cards come back first: due a day earlier sorts them ahead in the most-overdue-first queue.
-          return overconfidentFronts.has(input.front) ? { ...schedule, due: new Date(now.getTime() - DAY_MS).toISOString() } : schedule
+        (input) => ({ ...newCardSchedule(now), due: dueFor(input) }),
+        (existing, input) => {
+          // Missing a question that already has a card means that card's memory
+          // has failed: bring it back now instead of waiting out its interval.
+          // Suspended cards stay put; the learner chose to set them aside.
+          const due = dueFor(input)
+          if (!existing.suspended && existing.due > due) updateCardRow(ctx.db, { ...existing, due })
         }
       )
       created += cards.length

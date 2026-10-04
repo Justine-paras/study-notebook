@@ -39,10 +39,25 @@ export async function copyIntoLibrary(libraryDir: string, notebookId: string, sr
   return { storedPath, sizeBytes: (await stat(storedPath)).size }
 }
 
+let removalError: Error | null = null
+
+/** Makes the next library removal fail the way Windows does when a file is open in another app. */
+export function failNextRemoval(): void {
+  removalError = Object.assign(new Error("EBUSY: resource busy or locked, unlink 'Lecture.pdf'"), { code: 'EBUSY' })
+}
+
+function takeRemovalError(): void {
+  const err = removalError
+  removalError = null
+  if (err) throw err
+}
+
 export async function removeFromLibrary(storedPath: string): Promise<void> {
+  takeRemovalError()
   await rm(storedPath, { force: true })
 }
 
 export async function removeNotebookLibrary(libraryDir: string, notebookId: string): Promise<void> {
+  takeRemovalError()
   await rm(join(libraryDir, notebookId), { recursive: true, force: true })
 }

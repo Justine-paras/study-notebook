@@ -66,23 +66,27 @@ export function BarChart({
           </div>
         ))}
       </div>
-      <table className="sr-only">
-        <caption>{caption}</caption>
-        <thead>
-          <tr>
-            <th scope="col">{labelHeader}</th>
-            <th scope="col">{valueHeader}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {data.map((datum) => (
-            <tr key={datum.key}>
-              <th scope="row">{datum.fullLabel}</th>
-              <td>{datum.valueText}</td>
+      {/* The wrapper hides the table: a <table> ignores the 1px height of .sr-only,
+          so on its own it would stay full size and stretch the page. */}
+      <div className="sr-only">
+        <table>
+          <caption>{caption}</caption>
+          <thead>
+            <tr>
+              <th scope="col">{labelHeader}</th>
+              <th scope="col">{valueHeader}</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {data.map((datum) => (
+              <tr key={datum.key}>
+                <th scope="row">{datum.fullLabel}</th>
+                <td>{datum.valueText}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </figure>
   )
 }

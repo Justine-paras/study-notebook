@@ -1,8 +1,8 @@
 import { useEffect, useId, useRef } from 'react'
 import { ArrowLeft, CalendarCheck, Layers } from 'lucide-react'
 import type { TopicWithProgress } from '@shared/types'
+import { useAiAction } from '../../lib/aiJobs'
 import { formatDate, pluralize } from '../../lib/format'
-import { useApiMutation } from '../../lib/queries'
 import { ROUTES } from '../../lib/routes'
 import { AiWorking } from '../AiWorking'
 import { Markdown } from '../Markdown'
@@ -22,18 +22,22 @@ export interface RememberStepProps {
  * flashcards and returns the review plan. It runs once per visit.
  */
 export function RememberStep({ topic, autoStart }: RememberStepProps) {
-  const finish = useApiMutation('finishTopic')
-  // finishTopic may call the AI; a double call (StrictMode, a double click) must never happen.
+  // finishTopic may call the AI. As a job it survives leaving the page, and a
+  // second start while it runs (a remount, a double click) joins the running call.
+  const finish = useAiAction('finishTopic', `finish:${topic.id}`, {
+    task: 'flashcards',
+    label: `Flashcards for ${topic.title}`,
+    href: ROUTES.topic(topic.id, 'remember')
+  })
+  // Once per visit: finishing marks the topic done, which must not start it again.
   const startedRef = useRef(false)
-  const { mutate } = finish
+  const { runAsync } = finish
 
   const start = () => {
     if (startedRef.current) return
     startedRef.current = true
-    mutate([topic.id], {
-      onError: () => {
-        startedRef.current = false
-      }
+    runAsync(topic.id).catch(() => {
+      startedRef.current = false
     })
   }
 
@@ -51,6 +55,8 @@ export function RememberStep({ topic, autoStart }: RememberStepProps) {
         task="flashcards"
         title="Making your flashcards"
         explanation="Turning the lesson and the questions you missed into flashcards, then planning when each one comes back."
+        startedAt={finish.job?.startedAt}
+        subjectId={topic.id}
       />
     )
   }

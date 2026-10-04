@@ -2,12 +2,14 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { HashRouter, Route, Routes, useLocation } from 'react-router'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { Home, RotateCcw } from 'lucide-react'
+import { AiJobNotifier } from './components/AiJobNotifier'
 import { TopBar } from './components/TopBar'
 import { ErrorNotice } from './components/ErrorNotice'
 import { Button, ConfirmProvider, EmptyState, ErrorBoundary, Page, ToastProvider } from './components/ui'
 import { createQueryClient } from './lib/queries'
 import { PomodoroProvider } from './lib/pomodoro'
 import { ThemeProvider } from './lib/theme'
+import { useDayRollover } from './lib/useDayRollover'
 import TodayScreen from './screens/Today'
 import NotebooksScreen from './screens/Notebooks'
 import InsightsScreen from './screens/Insights'
@@ -81,6 +83,7 @@ function AppRoutes() {
 function Layout() {
   const location = useLocation()
   const mainRef = useRef<HTMLElement>(null)
+  useDayRollover()
 
   // Each screen starts at the top (only the main area scrolls, so the browser won't do it).
   useEffect(() => {
@@ -97,6 +100,7 @@ function Layout() {
         Skip to content
       </a>
       <TopBar />
+      <AiJobNotifier />
       <main id="main" ref={mainRef} className="app__main" tabIndex={-1}>
         <ErrorBoundary resetKeys={[location.pathname]} fallback={(props) => <ScreenCrashed {...props} />}>
           <AppRoutes />

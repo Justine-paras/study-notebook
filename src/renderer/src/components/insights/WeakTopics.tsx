@@ -3,7 +3,7 @@ import { RotateCcw } from 'lucide-react'
 import type { WeakTopic } from '@shared/types'
 import { Button, EmptyState, Panel, ProgressBar } from '../ui'
 import { ROUTES } from '../../lib/routes'
-import { masteryStatus, subjectLabel } from './insightsModel'
+import { subjectLabel, weakTopicStatus } from './insightsModel'
 import './WeakTopics.css'
 
 /** Rows shown before "Show all", so the side panels stay in view. */
@@ -26,7 +26,7 @@ export function WeakTopics({ topics }: { topics: WeakTopic[] }) {
         <>
           <ul id={listId} className="weak-topics__list">
             {shown.map((topic) => {
-              const status = masteryStatus(topic.mastery)
+              const status = weakTopicStatus(topic.mastery)
               return (
                 <li key={topic.topicId} className="weak-topics__row">
                   <div className="weak-topics__text">

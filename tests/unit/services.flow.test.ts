@@ -82,9 +82,12 @@ describe('study flow (real modules, demo AI)', () => {
     const result = await services.importSources(ctx, notebook.id, [
       { path: join(filesDir, 'CS330 Syllabus.txt') },
       { path: join(filesDir, 'Lecture 5 - Deadlocks.md'), kind: 'lecture' },
-      { path: join(filesDir, 'diagram.png') }
+      { path: join(filesDir, 'diagram.png') },
+      { path: join(filesDir, 'Moved away.pdf') }
     ])
-    expect(result.failed.map((f) => f.path)).toEqual([join(filesDir, 'diagram.png')])
+    expect(result.failed.map((f) => f.path)).toEqual([join(filesDir, 'diagram.png'), join(filesDir, 'Moved away.pdf')])
+    // The library's own errors are complete sentences and are shown as they are.
+    expect(result.failed[1]!.reason).toBe("The file couldn't be found. It may have been moved or deleted.")
     expect(result.sources.map((s) => s.status)).toEqual(['ready', 'ready'])
     ;[syllabus, lecture] = result.sources
     expect(syllabus.kind).toBe('syllabus')

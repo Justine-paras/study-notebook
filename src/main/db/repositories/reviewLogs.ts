@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite'
 import type { CardState, Confidence, ID, Rating, ReviewLog } from '@shared/types'
-import { num, prepare, str, strOrNull, type Row } from '../sql'
+import { num, prepare, str, strOrNull, type NotebookScope, type Row } from '../sql'
 
 function toReviewLog(row: Row): ReviewLog {
   return {
@@ -25,9 +25,21 @@ export function insertReviewLog(db: DatabaseSync, log: ReviewLog, notebookId: ID
 
 /** Review logs of one notebook's cards, or of all cards when `notebookId` is null. */
 export function listReviewLogs(db: DatabaseSync, notebookId: ID | null): ReviewLog[] {
-  const rows = notebookId
-    ? prepare(db, 'SELECT * FROM review_logs WHERE notebook_id = ? ORDER BY reviewed_at ASC').all(notebookId)
-    : prepare(db, 'SELECT * FROM review_logs ORDER BY reviewed_at ASC').all()
+  return listReviewLogsIn(db, notebookId ? { notebookId } : 'all')
+}
+
+/** Review logs of the cards in the notebooks `scope` covers, oldest first. */
+export function listReviewLogsIn(db: DatabaseSync, scope: NotebookScope): ReviewLog[] {
+  const rows =
+    scope === 'all'
+      ? prepare(db, 'SELECT * FROM review_logs ORDER BY reviewed_at ASC').all()
+      : scope === 'unarchived'
+        ? prepare(
+            db,
+            `SELECT r.* FROM review_logs r JOIN notebooks n ON n.id = r.notebook_id
+             WHERE n.archived = 0 ORDER BY r.reviewed_at ASC`
+          ).all()
+        : prepare(db, 'SELECT * FROM review_logs WHERE notebook_id = ? ORDER BY reviewed_at ASC').all(scope.notebookId)
   return rows.map(toReviewLog)
 }
 
@@ -37,10 +49,4 @@ export function listReviewLogsForCard(db: DatabaseSync, cardId: ID): ReviewLog[]
 
 export function listReviewLogsSince(db: DatabaseSync, sinceIso: string): ReviewLog[] {
   return prepare(db, 'SELECT * FROM review_logs WHERE reviewed_at >= ? ORDER BY reviewed_at ASC').all(sinceIso).map(toReviewLog)
-}
-
-export function reviewTimestampsSince(db: DatabaseSync, sinceIso: string): string[] {
-  return prepare(db, 'SELECT reviewed_at FROM review_logs WHERE reviewed_at >= ?')
-    .all(sinceIso)
-    .map((row) => str(row, 'reviewed_at'))
 }

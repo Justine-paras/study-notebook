@@ -152,9 +152,11 @@ function ReviewPart({ plan, onProgress, onContinue, onBreak }: ReviewPartProps) 
   const cardIds = planReviewCardIds(plan)
   const queue = useReviewQueue({ cardIds }, { enabled: cardIds.length > 0, staleTime: Infinity, refetchOnWindowFocus: false })
   const [cards, setCards] = useState<ReviewCard[] | null>(null)
+  // Only fresh data: a queue cached from an earlier visit may still hold cards graded since.
+  const settled = queue.isSuccess && !queue.isFetching
   useEffect(() => {
-    if (!cards && queue.data) setCards(stillDue(queue.data, Date.now()))
-  }, [cards, queue.data])
+    if (!cards && settled && queue.data) setCards(stillDue(queue.data, Date.now()))
+  }, [cards, settled, queue.data])
 
   const continueButton = (
     <Button size="lg" iconEnd={<ArrowRight size={18} aria-hidden="true" />} onClick={onContinue}>

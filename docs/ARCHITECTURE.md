@@ -80,8 +80,30 @@ Rules for every agent:
 - **Renderer** calls the typed `api` client (src/renderer/src/lib/api.ts),
   which unwraps envelopes and throws `ApiError` (with `.code`).
 - **AI progress**: long AI calls report progress with
-  `ctx.emitAiProgress({ jobId, task, progress, message })`; the renderer
-  listens with `studyBridge.onAiProgress`.
+  `ctx.emitAiProgress({ jobId, task, subjectId, progress, message })`
+  (through `runAiJob(ctx, { task, subjectId }, startMessage, call)`); the
+  renderer listens with `studyBridge.onAiProgress`. `subjectId` is the topic
+  (lessons, explanation feedback, flashcards, practice quizzes), the file
+  (summaries) or the notebook (syllabus, weak-spot quizzes, mock exams), so
+  two jobs of the same task each show their own progress.
+
+Security rules (src/main/security.ts, src/main/files/access.ts):
+
+- The window is sandboxed with context isolation. The preload may import
+  only `electron` and modules bundled into it (electron.vite.config.ts
+  bundles its dependencies); `src/preload/channels.ts` holds preload-only
+  channel names and must stay import-free.
+- IPC is answered only for the app's own top-level page; the preload only
+  forwards names in `STUDY_API_METHODS`.
+- Browser permissions are denied except `clipboard-sanitized-write` (the
+  Copy button on code blocks). No webviews or new windows; web links open
+  in the system browser; navigation away from the app is blocked.
+- In the installed app (`app.isPackaged`), `importSources` only reads files
+  returned by `pickFiles` or dropped on the window (`pathForFile` reports
+  them to main). Development and e2e runs skip this check.
+- `openPath`/`showItemInFolder` only accept paths inside the data folder.
+- Other files in the data folder: `window-state.json` (window size and
+  position). `npm run icon` regenerates `resources/icon.png`.
 
 `AppContext` (src/main/context.ts) is passed to every service: `db`
 (DatabaseSync), `ai` (StudyAi), `paths`, `desktop` (Electron-only actions),
@@ -91,8 +113,11 @@ Rules for every agent:
 
 Environment variables:
 
-- `STUDY_DEMO_AI=1`: AI returns offline, deterministic demo content built
-  from the inputs (used by tests, e2e and for trying the app without a key).
+- `STUDY_DEMO_AI=1` or the `--demo` switch (`npm run dev:demo`,
+  `npm run start:demo`, which work from PowerShell and cmd): AI returns
+  offline, deterministic demo content built from the inputs (used by tests,
+  e2e and for trying the app without a key). Without `STUDY_DATA_DIR`, demo
+  mode keeps its data in `<userData>/demo`, apart from the real notebooks.
 - `STUDY_DATA_DIR=<dir>`: overrides the data folder (e2e tests).
 - `STUDY_ALLOW_MULTIPLE=1`: skips the single-instance lock (e2e tests).
 - `ANTHROPIC_API_KEY`: used when no key is stored in Settings.
@@ -134,6 +159,21 @@ The app is organised around memory, not file types:
 7. **Insights**: weak topics across subjects, confidence vs accuracy,
    reviews due in the next 7 days, mistake log, study time.
 
+Rules shared by every part of the app (src/shared/learning.ts):
+
+- A review counts as recalled unless rated Again (`isRecalledRating`): Hard
+  is a successful, effortful recall, in mastery, the answer log and the
+  7-day recall rate alike.
+- Overconfident errors keep a topic weak only until recent accuracy reaches
+  the mastered bar (85%). Topics with only warm-up or learning-path answers
+  are never weak (`isWeakTopic` needs scored data).
+- A quiz mistake that matches an existing flashcard brings that card due
+  now (a day ago when the learner was sure), keeping its FSRS history.
+- Today's session asks `WEAK_SPOT_QUESTIONS` (8) weak-spot questions, one
+  quiz per notebook of at least `WEAK_SPOT_MIN_PER_QUIZ` (4)
+  (`weakSpotQuizSize`); a mock exam lasts `MOCK_EXAM_MINUTES` (60). The plan's
+  estimates and the renderer's defaults both use these constants.
+
 Mastery states and their colors (used everywhere a topic appears):
 
 | State | Meaning | Light bg / fg |
@@ -155,7 +195,12 @@ Tables: `notebooks`, `sources` (with `text` column for extracted text),
 `review_logs`, `notes`, `exams`, `focus_sessions`, `settings` (key TEXT
 PRIMARY KEY, value TEXT JSON). Deleting a notebook cascades to everything in
 it and removes its library folder. Index the columns you filter on
-(notebook_id, topic_id, due, answered_at).
+(notebook_id, topic_id, due, answered_at); migration 2 also indexes every
+foreign-key child column, so deletes never scan a child table.
+Opening the database marks sources left `processing` by an interrupted
+import as `error` (the learner deletes and re-adds them). Backups are
+written with `VACUUM INTO` to a temporary file that then replaces the
+chosen file, and the live database (or its -wal/-shm) is refused as a target.
 
 Source text budget for AI calls (backend decides what to send):
 
@@ -330,11 +375,23 @@ Touch targets at least 40px tall. Real `<button>`, `<a>`, `<input>`,
   query keys, and `useApiMutation(method)` for writes. Because everything is
   local and cheap, a successful mutation invalidates all queries.
 - AI actions (generate lesson, quiz, syllabus, explanation grading,
-  summaries, finishing a topic) can take 20-90 seconds: always show
-  `<AiWorking task=... />` (live progress message + elapsed time + a calm
-  explanation of what is being made), keep the rest of the UI usable, and
-  show errors with `<ErrorNotice error=... />` (friendly text; for
-  `NO_API_KEY`/`INVALID_API_KEY` a button to Settings).
+  summaries, finishing a topic) can take 30-120 seconds. Run them with
+  `useAiAction(method, key, { task, label, href, invalidate, onSuccess })`
+  from lib/aiJobs.ts, never a component mutation: the call is an app-wide
+  job keyed by e.g. `lesson:<topicId>`, so it survives leaving the page, a
+  second start joins the running call, and its result or error stays until
+  retried or dismissed. `<AiJobNotifier>` (mounted once in App) toasts jobs
+  that finish while no screen shows them; the top bar shows running jobs.
+  Always show `<AiWorking task=... startedAt={job.startedAt}
+  subjectId=... />` (live progress, elapsed time, a calm explanation) and
+  errors with `<ErrorNotice error=... onRetry onDismiss addFilesTo=... />`
+  (friendly text; a Settings button for `NO_API_KEY`/`INVALID_API_KEY`, an
+  "Add files" button for `NO_SOURCES`). For `AI_REFUSED`,
+  `SOURCE_TOO_LARGE` and `INVALID_INPUT` the friendly text is the main
+  process's own message, which says what to do.
+- `refetchAfterMutation` (lib/queries.ts) resolves once the active queries
+  have refetched; `useDayRollover` (in the App layout) refetches everything
+  when the local date changes.
 - Keyboard: review cards support Space/Enter to reveal and 1-4 to grade;
   quizzes support 1-5 / A-E to pick options.
 
@@ -438,3 +495,12 @@ end of each phase), settings icon button.
 - E2E: `npx electron-vite build && xvfb-run -a npx playwright test` launches
   `out/main/index.js` with `STUDY_DEMO_AI=1`, a temp `STUDY_DATA_DIR` and
   `STUDY_ALLOW_MULTIPLE=1`.
+- Packaged app (`electron-builder --linux dir` or `--win --dir`): the fuses
+  turn off `--inspect`, which Playwright's `_electron` needs, so drive the
+  real build over CDP (`--remote-debugging-port=0`, then
+  `chromium.connectOverCDP`), or package a test copy with
+  `-c.electronFuses.enableNodeCliInspectArguments=true`. It enforces the
+  file-access rule, so import through a stubbed `pickFiles` or a real file
+  passed to `pathForFile`, not a bare path.
+- Real AI path without a key or network: point `ANTHROPIC_BASE_URL` at a
+  local fake `/v1/messages` that streams SSE (the SDK client reads it).

@@ -1,5 +1,5 @@
-import { useId, useState } from 'react'
-import { CircleAlert, RotateCcw, Settings } from 'lucide-react'
+import { useEffect, useId, useRef, useState } from 'react'
+import { CircleAlert, FolderPlus, RotateCcw, Settings } from 'lucide-react'
 import { toApiError } from '../lib/api'
 import { Button } from './ui/Button'
 import './ErrorNotice.css'
@@ -9,6 +9,10 @@ export interface ErrorNoticeProps {
   error: unknown
   /** Shows a "Try again" button. */
   onRetry?: () => void
+  /** Shows a "Dismiss" button (for errors that stay until cleared, e.g. a failed AI job). */
+  onDismiss?: () => void
+  /** Where files are added (a notebook page): shown as "Add files" when the error is NO_SOURCES. */
+  addFilesTo?: string
   /** Bold first line. Default "That didn't work". */
   title?: string
   /** Smaller, for inline use. */
@@ -18,17 +22,36 @@ export interface ErrorNoticeProps {
 
 /**
  * Friendly error with an optional retry and technical details on demand.
- * For a missing or rejected API key it links to Settings.
- *   <ErrorNotice error={generate.error} onRetry={() => generate.mutate([topicId])} />
+ * For a missing or rejected API key it links to Settings; for missing files
+ * (NO_SOURCES) to the notebook when `addFilesTo` is given.
+ *   <ErrorNotice error={lesson.error} onRetry={() => lesson.run(topicId)} addFilesTo={ROUTES.notebook(id)} />
  */
-export function ErrorNotice({ error, onRetry, title = "That didn't work", compact = false, className }: ErrorNoticeProps) {
+export function ErrorNotice({
+  error,
+  onRetry,
+  onDismiss,
+  addFilesTo,
+  title = "That didn't work",
+  compact = false,
+  className
+}: ErrorNoticeProps) {
   const [showDetails, setShowDetails] = useState(false)
   const detailsId = useId()
+  const noticeRef = useRef<HTMLDivElement>(null)
+  // A failed AI job puts its form back with the error underneath, which on a
+  // laptop screen is often below the fold: bring a new error into view (no
+  // jump when it is already visible).
+  useEffect(() => {
+    if (error !== null && error !== undefined) noticeRef.current?.scrollIntoView?.({ block: 'nearest' })
+  }, [error])
   if (error === null || error === undefined) return null
   const apiError = toApiError(error)
+  const needsFiles = apiError.code === 'NO_SOURCES' && addFilesTo !== undefined
+  // The fix comes first: a retry only helps once the key or the files are there.
+  const fixFirst = apiError.needsSettings || needsFiles
 
   return (
-    <div className={['error-notice', compact && 'error-notice--compact', className].filter(Boolean).join(' ')} role="alert">
+    <div ref={noticeRef} className={['error-notice', compact && 'error-notice--compact', className].filter(Boolean).join(' ')} role="alert">
       <CircleAlert className="error-notice__icon" size={compact ? 18 : 20} aria-hidden="true" />
       <div className="error-notice__body">
         <div className="error-notice__title">{title}</div>
@@ -39,14 +62,24 @@ export function ErrorNotice({ error, onRetry, title = "That didn't work", compac
               Open Settings
             </Button>
           )}
+          {needsFiles && (
+            <Button to={addFilesTo} size="sm" icon={<FolderPlus size={16} aria-hidden="true" />}>
+              Add files
+            </Button>
+          )}
           {onRetry && (
             <Button
-              variant={apiError.needsSettings ? 'subtle' : 'secondary'}
+              variant={fixFirst ? 'subtle' : 'secondary'}
               size="sm"
               icon={<RotateCcw size={16} aria-hidden="true" />}
               onClick={onRetry}
             >
               Try again
+            </Button>
+          )}
+          {onDismiss && (
+            <Button variant="ghost" size="sm" onClick={onDismiss}>
+              Dismiss
             </Button>
           )}
           <button

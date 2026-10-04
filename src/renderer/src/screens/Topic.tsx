@@ -27,6 +27,7 @@ import {
 } from '../components/topic/topicModel'
 import { WarmupStep } from '../components/topic/WarmupStep'
 import { BackLink, Button, EmptyState, LoadingBlock, Menu, Page, PageHeader, useConfirm } from '../components/ui'
+import { useAiAction } from '../lib/aiJobs'
 import { isApiError } from '../lib/api'
 import { formatMinutes, PATH_STEP_LABELS } from '../lib/format'
 import { usePomodoroNotebook } from '../lib/pomodoro'
@@ -45,6 +46,12 @@ function scrollPageToTop() {
 /** A topic's 5-step learning path: warm-up, learn, explain it, practice, remember. */
 export default function TopicScreen() {
   const { topicId } = useParams()
+  // Keyed: links between topics ("Connects to", next topic) reuse this route, and
+  // nothing (chunk, auto-finish, pending steps) may carry over to another topic.
+  return <TopicView key={topicId} topicId={topicId} />
+}
+
+function TopicView({ topicId }: { topicId: ID | undefined }) {
   const [params, setParams] = useSearchParams()
   const confirm = useConfirm()
   const topic = useTopic(topicId)
@@ -54,7 +61,13 @@ export default function TopicScreen() {
   usePomodoroNotebook(notebookId)
   useDocumentTitle(topic.data?.title ?? 'Topic')
 
-  const generate = useApiMutation('generateLesson')
+  // A job, not a component mutation: writing a lesson takes a minute or two and
+  // must survive leaving the page (and never start twice).
+  const generate = useAiAction('generateLesson', topicId ? `lesson:${topicId}` : null, {
+    task: 'lesson',
+    label: topic.data ? `Lesson on ${topic.data.title}` : 'Lesson',
+    href: topicId ? ROUTES.topic(topicId) : null
+  })
   const { mutate: persistStep } = useApiMutation('setTopicStep', {
     invalidate: [
       queryKeys.topic(topicId ?? ''),
@@ -119,7 +132,7 @@ export default function TopicScreen() {
         "The lesson is written again from your files, with new parts and questions. Your place in the learning path, your notes and your flashcards stay as they are.",
       confirmLabel: 'Write a new lesson'
     })
-    if (ok) generate.mutate([current.id, { regenerate: true }])
+    if (ok) generate.run(current.id, { regenerate: true })
   }
 
   if (topic.isPending) {
@@ -162,9 +175,17 @@ export default function TopicScreen() {
   } else if (lesson.error) {
     main = <ErrorNotice error={lesson.error} onRetry={() => void lesson.refetch()} title="Your lesson couldn't be opened" />
   } else if (!lessonData) {
-    main = <LessonStart topic={current} onGenerate={() => generate.mutate([current.id])} pending={generate.isPending} error={generate.error} />
+    main = (
+      <LessonStart
+        topic={current}
+        onGenerate={() => generate.run(current.id)}
+        pending={generate.isPending}
+        startedAt={generate.job?.startedAt}
+        error={generate.error}
+      />
+    )
   } else if (generate.isPending) {
-    main = <AiWorking task="lesson" title={`Writing a new lesson on ${current.title}`} />
+    main = <AiWorking task="lesson" title={`Writing a new lesson on ${current.title}`} startedAt={generate.job?.startedAt} subjectId={current.id} />
   } else {
     const content: Record<PathStep, ReactNode> = {
       warmup: <WarmupStep topic={current} lesson={lessonData} answers={answers} onAnswer={recordInstant} onNext={() => goTo('learn')} />,
@@ -194,7 +215,14 @@ export default function TopicScreen() {
     }
     main = (
       <>
-        <ErrorNotice error={generate.error} onRetry={() => generate.mutate([current.id, { regenerate: true }])} title="A new lesson couldn't be written" compact />
+        <ErrorNotice
+          error={generate.error}
+          onRetry={() => generate.run(current.id, { regenerate: true })}
+          onDismiss={generate.dismiss}
+          addFilesTo={ROUTES.notebook(current.notebookId)}
+          title="A new lesson couldn't be written"
+          compact
+        />
         {content[step]}
       </>
     )

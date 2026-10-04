@@ -3,8 +3,8 @@
 import { calibration, daysBetween, forecastDue, localDate, weakTopicReason } from '@shared/learning'
 import type { Exam, ID, Insights, Notebook, TopicWithProgress, WeakTopic } from '@shared/types'
 import type { AppContext } from '../context'
-import { listAnswersSince, listRecentMistakes } from '../db/repositories/answers'
-import { listActiveCards } from '../db/repositories/cards'
+import { listRatedAnswerFactsSince, listRecentMistakes } from '../db/repositories/answers'
+import { listDueTimesBefore } from '../db/repositories/cards'
 import { listUpcomingExamRows } from '../db/repositories/exams'
 import { listFocusSessionsSince } from '../db/repositories/focusSessions'
 import { listNotebookRows } from '../db/repositories/notebooks'
@@ -30,7 +30,7 @@ export async function getInsights(ctx: AppContext): Promise<Insights> {
   const allNotebooks = listNotebookRows(ctx.db)
   const active = allNotebooks.filter((n) => !n.archived)
   const notebookById = new Map<ID, Notebook>(allNotebooks.map((n) => [n.id, n]))
-  const topicsByNotebook = loadAllTopicsByNotebook(ctx)
+  const topicsByNotebook = loadAllTopicsByNotebook(ctx, 'unarchived')
   const exams = listUpcomingExamRows(ctx.db, today)
 
   const weakTopics: WeakTopic[] = active
@@ -59,9 +59,9 @@ export async function getInsights(ctx: AppContext): Promise<Insights> {
       }
     })
 
-  const recentAnswers = listAnswersSince(ctx.db, new Date(now.getTime() - CALIBRATION_DAYS * DAY_MS).toISOString())
+  const ratedAnswers = listRatedAnswerFactsSince(ctx.db, new Date(now.getTime() - CALIBRATION_DAYS * DAY_MS).toISOString())
   const weekAgo = new Date(now.getTime() - 7 * DAY_MS).toISOString()
-  const overconfidentLast7Days = recentAnswers.filter((a) => a.answeredAt >= weekAgo && a.confidence === 'sure' && !a.correct).length
+  const overconfidentLast7Days = ratedAnswers.filter((a) => a.answeredAt >= weekAgo && a.confidence === 'sure' && !a.correct).length
 
   const minutesByDate = focusMinutesByDate(ctx, STUDY_DAYS - 1)
   const studyMinutesByDay = Array.from({ length: STUDY_DAYS }, (_, i) => {
@@ -82,9 +82,10 @@ export async function getInsights(ctx: AppContext): Promise<Insights> {
 
   return {
     weakTopics,
-    calibration: calibration(recentAnswers.filter((a) => a.confidence !== null)),
+    calibration: calibration(ratedAnswers),
     overconfidentLast7Days,
-    forecast: forecastDue(listActiveCards(ctx.db), now, FORECAST_DAYS),
+    // Only the cards due before the end of the forecast window (overdue ones land on day 0).
+    forecast: forecastDue(listDueTimesBefore(ctx.db, startOfLocalDayOffset(now, FORECAST_DAYS).toISOString()), now, FORECAST_DAYS),
     mistakes: listRecentMistakes(ctx.db, MISTAKE_LOG_SIZE),
     studyMinutesByDay,
     studyMinutesBySubject,

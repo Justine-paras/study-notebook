@@ -153,6 +153,18 @@ describe('parseQuestionsOutput', () => {
     expect(result.rejected).toHaveLength(3)
   })
 
+  it('accepts enum values in any casing (structured outputs do not guarantee it)', () => {
+    const result = parseQuestionsOutput(
+      { questions: [rawQuestion({ type: 'MC', difficulty: 'Hard' }), rawQuestion({ type: ' Tf ', prompt: 'Stacks are LIFO.', answer: 'True' })] },
+      { topics, primaryTopicId: null, types: ['mc', 'tf'], difficulty: 'mixed' }
+    )
+    expect(result.rejected).toEqual([])
+    expect(result.questions.map((q) => [q.type, q.difficulty])).toEqual([
+      ['mc', 'hard'],
+      ['tf', rawQuestion({}).difficulty]
+    ])
+  })
+
   it('applies a fixed difficulty to every question', () => {
     const { questions } = parseQuestionsOutput({ questions: [rawQuestion({ difficulty: 'easy' })] }, { topics, primaryTopicId: null, types: ['mc'], difficulty: 'hard' })
     expect(questions[0].difficulty).toBe('hard')
@@ -190,6 +202,15 @@ describe('parseLessonOutput', () => {
     expect(content.keyTerms.map((k) => k.term)).toEqual(['push', 'pop', 'peek'])
     expect(content.estMinutes).toBe(180)
     expect(content.sourcesUsed).toEqual(['Stacks.pdf'])
+  })
+
+  it('accepts check and warm-up enum values in any casing', () => {
+    const shouting = { ...check, type: 'TF', difficulty: 'Easy' }
+    const content = parseLessonOutput({ ...lesson, warmup: [shouting, shouting] }, { topic: topics[0], sourceNames: [] })
+    expect(content.warmup.map((q) => [q.type, q.difficulty])).toEqual([
+      ['tf', 'easy'],
+      ['tf', 'easy']
+    ])
   })
 
   it('says when the lesson is based on the description alone', () => {

@@ -41,6 +41,13 @@ export const TASK_MAX_TOKENS: Record<AiTask, readonly [number, number]> = {
   explanation: [12_000, 24_000]
 }
 
+/** Largest `max_tokens` each model accepts; a larger value is a 400. */
+export const MODEL_MAX_OUTPUT_TOKENS: Record<AiModelId, number> = {
+  'claude-opus-5-5': 128_000,
+  'claude-sonnet-5-5': 128_000,
+  'claude-haiku-4-5': 64_000
+}
+
 /** Haiku 4.5 has no effort, adaptive thinking or server-side fallbacks. */
 export function isHaiku(model: AiModelId): boolean {
   return model === 'claude-haiku-4-5'
@@ -90,6 +97,8 @@ export interface StructuredRequest {
   sources: AiSourceDoc[]
   schema: JsonSchema
   maxTokens: number
+  /** Opt in to server-side refusal fallbacks where the model supports them (default true). */
+  fallbacks?: boolean
 }
 
 /**
@@ -102,7 +111,7 @@ export function buildMessageParams(request: StructuredRequest): BetaMessageStrea
   const haiku = isHaiku(request.model)
   const params: BetaMessageStreamParams = {
     model: request.model,
-    max_tokens: request.maxTokens,
+    max_tokens: Math.min(request.maxTokens, MODEL_MAX_OUTPUT_TOKENS[request.model]),
     system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
     messages: [{ role: 'user', content }],
     // Thinking is omitted on purpose: Opus 5.5 always thinks (adaptive) and Sonnet 5.5 defaults to
@@ -111,7 +120,7 @@ export function buildMessageParams(request: StructuredRequest): BetaMessageStrea
       ? { format: { type: 'json_schema', schema: request.schema } }
       : { effort: TASK_EFFORT[request.task], format: { type: 'json_schema', schema: request.schema } }
   }
-  if (!haiku) {
+  if (!haiku && request.fallbacks !== false) {
     // A policy decline is retried server-side on Anthropic's recommended model for that category.
     params.betas = [FALLBACK_BETA]
     params.fallbacks = 'default'
@@ -213,9 +222,17 @@ export interface StructuredCall<T> extends Omit<StructuredRequest, 'maxTokens'> 
 }
 
 /**
+ * Clients whose account rejected the server-side fallback opt-in (a retired
+ * or not-enabled beta header is a 400). Later calls skip it instead of
+ * waiting for a failed request first.
+ */
+const fallbacksRejected = new WeakSet<AiClient>()
+
+/**
  * Streams one structured request and returns the validated result.
  * Refusal -> AI_REFUSED. max_tokens -> one retry with a larger limit.
  * Invalid output -> one retry with the reason appended. Then AI_BAD_OUTPUT.
+ * A 400 on a request that opted in to fallbacks -> one retry without them.
  */
 export async function runStructured<T>(client: AiClient, call: StructuredCall<T>, options: CallOptions = {}): Promise<T> {
   const [firstLimit, retryLimit] = TASK_MAX_TOKENS[call.task]
@@ -227,13 +244,30 @@ export async function runStructured<T>(client: AiClient, call: StructuredCall<T>
 
   tracker.start()
   for (;;) {
-    const params = buildMessageParams({ ...call, instruction, maxTokens })
-    const message = await streamMessage(client, params, tracker, options.signal)
-
-    if (message.stop_reason === 'refusal') {
-      throw new AppError('AI_REFUSED', 'The AI declined to write this. Try different files or rephrase the topic.')
+    const params = buildMessageParams({ ...call, instruction, maxTokens, fallbacks: !fallbacksRejected.has(client) })
+    let message: BetaMessage
+    try {
+      message = await streamMessage(client, params, tracker, options.signal)
+    } catch (err) {
+      // Fallbacks are a beta: if the account doesn't accept the header (or it is
+      // retired one day), every Opus/Sonnet request would fail. The request
+      // without the opt-in is otherwise identical, so a 400 it doesn't share is
+      // the opt-in's fault; one it shares is reported as usual.
+      if (!(err instanceof Anthropic.BadRequestError) || params.fallbacks === undefined) throw mapAiError(err)
+      try {
+        message = await streamMessage(client, buildMessageParams({ ...call, instruction, maxTokens, fallbacks: false }), tracker, options.signal)
+      } catch (retryErr) {
+        throw mapAiError(retryErr)
+      }
+      fallbacksRejected.add(client)
     }
-    if (message.stop_reason === 'max_tokens' || message.stop_reason === 'model_context_window_exceeded') {
+
+    if (message.stop_reason === 'refusal') throw refusalError(message)
+    if (message.stop_reason === 'model_context_window_exceeded') {
+      // A bigger max_tokens can't help when the input already fills the context window.
+      throw new AppError('SOURCE_TOO_LARGE', "The files for this request fill the AI model's whole context window. Pick fewer files for this topic.")
+    }
+    if (message.stop_reason === 'max_tokens') {
       if (grewLimit) throw new AppError('AI_BAD_OUTPUT', 'The answer was too long to finish. Try fewer files or a narrower topic.')
       grewLimit = true
       maxTokens = retryLimit
@@ -253,24 +287,41 @@ export async function runStructured<T>(client: AiClient, call: StructuredCall<T>
   }
 }
 
+/** Streams one request; SDK errors are thrown unmapped so the caller can tell a 400 apart. */
 async function streamMessage(
   client: AiClient,
   params: BetaMessageStreamParams,
   tracker: ProgressTracker,
   signal: AbortSignal | undefined
 ): Promise<BetaMessage> {
-  try {
-    const stream = client.beta.messages.stream(params, signal ? { signal } : undefined)
-    stream.on('streamEvent', (event) => {
-      if (event.type !== 'content_block_start') return
-      if (event.content_block.type === 'thinking' || event.content_block.type === 'redacted_thinking') tracker.thinking()
-      if (event.content_block.type === 'fallback') tracker.status('Switching to a backup model')
-    })
-    stream.on('text', (delta) => tracker.addText(delta))
-    return await stream.finalMessage()
-  } catch (err) {
-    throw mapAiError(err)
+  const stream = client.beta.messages.stream(params, signal ? { signal } : undefined)
+  stream.on('streamEvent', (event) => {
+    if (event.type !== 'content_block_start') return
+    if (event.content_block.type === 'thinking' || event.content_block.type === 'redacted_thinking') tracker.thinking()
+    if (event.content_block.type === 'fallback') tracker.status('Switching to a backup model')
+  })
+  stream.on('text', (delta) => tracker.addText(delta))
+  return await stream.finalMessage()
+}
+
+const REFUSAL_AREAS: Record<string, string> = {
+  cyber: 'security',
+  bio: 'biology',
+  frontier_llm: 'AI model development',
+  general_harms: 'a sensitive subject'
+}
+
+/** A declined request (after any server-side fallback also declined). Partial output is discarded. */
+export function refusalError(message: BetaMessage): AppError {
+  const category = message.stop_details?.category ?? null
+  const area = category ? REFUSAL_AREAS[category] : undefined
+  if (area) {
+    return new AppError(
+      'AI_REFUSED',
+      `The AI's safety filter declined this request because it touches on ${area}. Course material sometimes trips it by mistake: try fewer files, or another model in Settings.`
+    )
   }
+  return new AppError('AI_REFUSED', 'The AI declined to write this. Try different files or rephrase the topic.')
 }
 
 /**
@@ -334,6 +385,11 @@ export function mapAiError(err: unknown): AppError {
         if (err.status === undefined || err.status >= 500) return new AppError('AI_UNAVAILABLE', ERROR_MESSAGES.AI_UNAVAILABLE)
         return new AppError('UNKNOWN', `The AI service returned an error (${err.status}).`)
     }
+  }
+  // The SDK's base error without an HTTP status comes from reading the stream:
+  // the connection dropped (Wi-Fi change, sleep) or closed before the answer ended.
+  if (err instanceof Anthropic.AnthropicError) {
+    return new AppError('NETWORK', 'The connection to the AI service dropped before the answer was finished. Check your internet connection and try again.')
   }
   return new AppError('UNKNOWN', err instanceof Error ? err.message : 'Something went wrong talking to the AI.')
 }

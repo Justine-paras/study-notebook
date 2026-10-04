@@ -520,6 +520,14 @@ export type AiTask = 'syllabus' | 'lesson' | 'quiz' | 'flashcards' | 'explanatio
 export interface AiProgressEvent {
   jobId: ID
   task: AiTask
+  /**
+   * What the job works on, so two jobs of the same task (two files being
+   * summarized at once) each show their own progress: the topic for lessons,
+   * explanation feedback, flashcards and practice quizzes; the file for
+   * summaries; the notebook for syllabus reading, weak-spot quizzes and mock
+   * exams. Missing or null when not known.
+   */
+  subjectId?: ID | null
   /** Rough 0-1 progress from output tokens streamed so far, null when unknown. */
   progress: number | null
   message: string

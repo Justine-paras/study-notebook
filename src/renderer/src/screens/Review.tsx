@@ -28,9 +28,11 @@ export default function ReviewScreen() {
   const queue = useReviewQueue(notebookId ? { notebookId } : {}, { staleTime: Infinity, refetchOnWindowFocus: false })
   const [run, setRun] = useState<Run | null>(null)
   const [finishedAt, setFinishedAt] = useState<number | null>(null)
+  // Only fresh data: a queue cached from an earlier visit may still hold cards graded since.
+  const settled = queue.isSuccess && !queue.isFetching
   useEffect(() => {
-    if (!run && queue.data) setRun({ key: 0, cards: queue.data })
-  }, [run, queue.data])
+    if (!run && settled && queue.data) setRun({ key: 0, cards: queue.data })
+  }, [run, settled, queue.data])
 
   // After a run the queue refetches; only data newer than the finish counts as "more".
   const moreDue = finishedAt !== null && queue.dataUpdatedAt > finishedAt ? (queue.data?.length ?? 0) : 0
@@ -46,7 +48,7 @@ export default function ReviewScreen() {
     />
   )
 
-  if (queue.isPending || (notebookId && notebook.isPending)) {
+  if (queue.isPending || (!run && queue.isFetching) || (notebookId && notebook.isPending)) {
     return (
       <Page width="narrow">
         {header}

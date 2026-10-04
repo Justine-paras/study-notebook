@@ -12,8 +12,10 @@ import {
   formatInterval,
   gradeResponse,
   interleaveByNotebook,
+  isRecalledRating,
   levenshtein,
   localDate,
+  MOCK_EXAM_MINUTES,
   newCardSchedule,
   normalizeAnswer,
   planMinutes,
@@ -21,6 +23,7 @@ import {
   retrievability,
   reviewPlanLabels,
   streakDays,
+  weakSpotQuizSize,
   weakTopicReason,
   type PlanCard,
   type PlanTopic,
@@ -363,6 +366,12 @@ describe('newCardSchedule', () => {
   })
 })
 
+describe('isRecalledRating', () => {
+  it('counts every rating except Again as recalled', () => {
+    expect(([1, 2, 3, 4] as Rating[]).map(isRecalledRating)).toEqual([false, true, true, true])
+  })
+})
+
 describe('adjustRatingForConfidence', () => {
   it('downgrades Good/Easy to Hard when guessing only', () => {
     expect(adjustRatingForConfidence(3, 'guess')).toBe(2)
@@ -669,9 +678,9 @@ describe('computeTopicProgress', () => {
     expect(run({ answers }).mastery).toBe(Math.round((100 * 0.5) / 0.6))
   })
 
-  it('counts reviews as data points (correct when rating >= 3) and uses card memory', () => {
+  it('counts reviews as data points (correct unless rated Again) and uses card memory', () => {
     const reviewed = card({ ...applyRating(newCardSchedule(daysAgo(2)), 3, daysAgo(2), 0.9).schedule, due: daysAgo(-3).toISOString() })
-    const reviews = [review(3, daysAgo(2)), review(2, daysAgo(3)), review(4, daysAgo(4))]
+    const reviews = [review(3, daysAgo(2)), review(1, daysAgo(3)), review(4, daysAgo(4))]
     const p = run({ topic: topic({ pathStep: 'done' }), cards: [reviewed], reviews })
     const w = [1, 0.85, 0.85 ** 2]
     const accuracy = (w[0] + w[2]) / (w[0] + w[1] + w[2])
@@ -680,6 +689,18 @@ describe('computeTopicProgress', () => {
     expect(p.mastery).toBe(Math.round(100 * (0.5 * accuracy + 0.4 * memory + 0.1)))
     expect(p.answeredCount).toBe(3)
     expect(p.missedCount).toBe(1)
+  })
+
+  it('counts a Hard review as recalled, like the answer log and the recall rate do', () => {
+    const done = topic({ pathStep: 'done' })
+    const hard = [review(2, daysAgo(1)), review(2, daysAgo(2)), review(2, daysAgo(3)), review(2, daysAgo(4))]
+    expect(run({ topic: done, cards: [card()], reviews: hard })).toMatchObject({ recentAccuracy: 100, answeredCount: 4, missedCount: 0 })
+    const again = hard.map((r) => ({ ...r, rating: 1 as const }))
+    expect(run({ topic: done, cards: [card()], reviews: again })).toMatchObject({ recentAccuracy: 0, missedCount: 4, state: 'weak' })
+    // Spaced Hard reviews are still recalls, so they prove the topic over time.
+    const strong = card({ ...newCardSchedule(NOW), state: 'review', stability: 60, lastReview: daysAgo(1).toISOString(), due: daysAgo(-50).toISOString() })
+    const answers = Array.from({ length: 6 }, (_, i) => answer(true, daysAgo(i + 1)))
+    expect(run({ topic: done, answers, cards: [strong], reviews: [review(2, daysAgo(1)), review(2, daysAgo(4))] }).state).toBe('mastered')
   })
 
   it('does not double count a review logged both as answer and review log', () => {
@@ -713,6 +734,20 @@ describe('computeTopicProgress', () => {
     const done = topic({ pathStep: 'done' })
     expect(run({ topic: done, answers: [...correct, ...recent] })).toMatchObject({ state: 'weak', overconfidentCount: 2 })
     expect(run({ topic: done, answers: [...correct, ...old, ...unsure, recent[0]] })).toMatchObject({ state: 'reviewing', overconfidentCount: 1 })
+  })
+
+  it('stops calling a topic weak for overconfident errors once recent answers make up for them', () => {
+    const done = topic({ pathStep: 'done' })
+    const sureWrong = [answer(false, daysAgo(6), { confidence: 'sure' }), answer(false, daysAgo(6), { confidence: 'sure' })]
+    const fewRight = Array.from({ length: 3 }, (_, i) => answer(true, daysAgo(3 - i)))
+    const manyRight = Array.from({ length: 6 }, (_, i) => answer(true, daysAgo(5 - i)))
+    // Right after the errors, and with only a few right answers since: still weak.
+    expect(run({ topic: done, answers: sureWrong }).state).toBe('weak')
+    expect(run({ topic: done, answers: [...sureWrong, ...fewRight] })).toMatchObject({ state: 'weak', overconfidentCount: 2 })
+    // Six right answers since bring recent accuracy above 85%: no longer weak, though the errors are still reported.
+    const fixed = run({ topic: done, answers: [...sureWrong, ...manyRight] })
+    expect(fixed.recentAccuracy).toBeGreaterThanOrEqual(85)
+    expect(fixed).toMatchObject({ state: 'reviewing', overconfidentCount: 2 })
   })
 
   it('counts a sure review rated Again as overconfident', () => {
@@ -869,10 +904,26 @@ describe('buildTodayPlan', () => {
       title: 'Fix 3 weak spots',
       detail: 'Deadlock avoidance · Paging · AVL rotations',
       reason: 'you keep missing these, and 2 are on your Oct 12 Quiz 3',
-      estMinutes: 15,
+      // Two notebooks: two weak-spot quizzes of 4 questions.
+      estMinutes: 8,
       topicIds: ['w2', 'w4', 'w3'],
       notebookIds: ['nb2', 'nb1']
     })
+  })
+
+  it('estimates the weak block from the weak-spot quizzes the session will run', () => {
+    expect([1, 2, 3, 4].map(weakSpotQuizSize)).toEqual([8, 4, 4, 4])
+    const weakIn = (notebookIds: string[]): number =>
+      buildTodayPlan(
+        planInput({
+          topics: notebookIds.map((nb, i) => planTopic(`w${i}`, i, 'weak', 30, { notebookId: nb, pathStep: 'done' })),
+          newTopicsPerDay: 0
+        })
+      ).blocks[0].estMinutes
+    // One topic still gets a whole 8-question quiz; three topics of one notebook share it.
+    expect(weakIn(['nb1'])).toBe(8)
+    expect(weakIn(['nb1', 'nb1', 'nb1'])).toBe(8)
+    expect(weakIn(['nb1', 'nb2', 'nb3'])).toBe(12)
   })
 
   it('words the weak reason for one topic and for several exams', () => {
@@ -936,7 +987,7 @@ describe('buildTodayPlan', () => {
       title: 'Mock exam: Midterm',
       detail: 'CS 201 · 2 topics · 70% ready',
       reason: 'Midterm is in 2 days: rehearse it under exam conditions',
-      estMinutes: 30,
+      estMinutes: MOCK_EXAM_MINUTES,
       cardIds: [],
       topicIds: ['a', 'b'],
       notebookIds: ['nb1']
@@ -961,7 +1012,7 @@ describe('buildTodayPlan', () => {
       })
     )
     expect(plan.blocks.map((b) => b.kind)).toEqual(['review', 'weak', 'learn', 'exam_prep'])
-    expect(plan.totalMinutes).toBe(1 + 5 + 20 + 30)
+    expect(plan.totalMinutes).toBe(1 + 8 + 20 + 60)
     expect(plan.totalMinutes).toBe(planMinutes(plan.blocks))
     expect(plan.blocks[1].reason).toBe("you keep missing this one, and it's on your Oct 5 Midterm")
     expect(plan.blocks[3].reason).toBe('Midterm is tomorrow: rehearse it under exam conditions')
