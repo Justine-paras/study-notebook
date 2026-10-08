@@ -18,6 +18,7 @@ import {
   clearApiKey,
   exportBackup,
   getSettings,
+  listOllamaModels,
   openDataFolder,
   setApiKey,
   testApiKey,
@@ -110,6 +111,7 @@ export const services: ServiceImpl = {
   setApiKey,
   clearApiKey,
   testApiKey,
+  listOllamaModels,
   exportBackup,
   openDataFolder
 }

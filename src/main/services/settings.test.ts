@@ -92,7 +92,11 @@ describe('settings service', () => {
   it('returns defaults with read-only fields', async () => {
     expect(await getSettings(ctx)).toEqual({ ...DEFAULT_SETTINGS, hasApiKey: false, demoAi: false, dataDir: ctx.tempDir })
     expect(DEFAULT_SETTINGS).toEqual({
+      aiProvider: 'claude',
       model: 'claude-opus-5-5',
+      ollamaUrl: 'http://127.0.0.1:11434',
+      ollamaModel: null,
+      ollamaContextTokens: 16384,
       theme: 'system',
       focusMinutes: 25,
       breakMinutes: 5,

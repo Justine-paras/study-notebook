@@ -26,6 +26,7 @@ import type {
   Quiz,
   QuizKind,
   QuizResult,
+  OllamaModelInfo,
   QuizSettings,
   Rating,
   ReviewCard,
@@ -191,8 +192,18 @@ export interface StudyApi {
   /** Stores the Anthropic API key encrypted with the OS keychain (Electron safeStorage). */
   setApiKey(key: string): Promise<Settings>
   clearApiKey(): Promise<Settings>
-  /** Makes a tiny API call to check the key works. */
+  /**
+   * Checks the current AI provider works: for Claude a tiny API call with the
+   * saved key; for Ollama that the server answers and the chosen model is
+   * installed. Never throws for a failed check; ok is false with a message.
+   */
   testApiKey(): Promise<{ ok: boolean; message: string }>
+  /**
+   * Lists the models installed in Ollama at the saved URL, or at `url` when
+   * given (to try an address before saving it). Never throws for an
+   * unreachable server; ok is false with a message saying what to do.
+   */
+  listOllamaModels(url?: string): Promise<{ ok: boolean; message: string; models: OllamaModelInfo[] }>
   /** Save dialog, then copies a consistent snapshot of the database there. Null when cancelled. */
   exportBackup(): Promise<{ path: string } | null>
   openDataFolder(): Promise<void>
@@ -212,7 +223,7 @@ export const STUDY_API_METHODS = [
   'listExams', 'createExam', 'updateExam', 'deleteExam',
   'getToday', 'getInsights',
   'logFocusSession', 'notify',
-  'getSettings', 'updateSettings', 'setApiKey', 'clearApiKey', 'testApiKey', 'exportBackup', 'openDataFolder'
+  'getSettings', 'updateSettings', 'setApiKey', 'clearApiKey', 'testApiKey', 'listOllamaModels', 'exportBackup', 'openDataFolder'
 ] as const satisfies readonly StudyApiMethod[]
 
 // Compile-time check that STUDY_API_METHODS lists every method.
