@@ -59,17 +59,18 @@ const lessonQuestionJson = obj({
   sourceRef: str('File and page/slide, e.g. "Lecture 05.pdf, page 12". Empty when there are no files.')
 })
 
-const quizQuestionJson = obj({
-  topicIndex: int('Number of the topic this question is about, from the numbered topic list.'),
-  type: strEnum(QUESTION_TYPES),
-  prompt: str('The question (Markdown). For fill, contains ____ where the blank is.'),
-  options: arr(str(), 'mc: 3-5 choices. tf: exactly ["True", "False"]. fill/identification: [].'),
-  answer: str('mc/tf: copied exactly from options. fill/identification: the expected word or short phrase.'),
-  acceptable: arr(str(), 'fill/identification: other correct answers (synonyms, spellings). [] for mc/tf.'),
-  explanation: str('Why the answer is right and why the tempting wrong answers are wrong (Markdown).'),
-  difficulty: strEnum(DIFFICULTIES),
-  sourceRef: str('File and page/slide, e.g. "Lecture 05.pdf, page 12". Empty when there are no files.')
-})
+const quizQuestionJson = (types: readonly QuestionType[]): JsonSchema =>
+  obj({
+    topicIndex: int('Number of the topic this question is about, from the numbered topic list.'),
+    type: strEnum(types),
+    prompt: str('The question (Markdown). For fill, contains ____ where the blank is.'),
+    options: arr(str(), 'mc: 3-5 choices. tf: exactly ["True", "False"]. fill/identification: [].'),
+    answer: str('mc/tf: copied exactly from options. fill/identification: the expected word or short phrase.'),
+    acceptable: arr(str(), 'fill/identification: other correct answers (synonyms, spellings). [] for mc/tf.'),
+    explanation: str('Why the answer is right and why the tempting wrong answers are wrong (Markdown).'),
+    difficulty: strEnum(DIFFICULTIES),
+    sourceRef: str('File and page/slide, e.g. "Lecture 05.pdf, page 12". Empty when there are no files.')
+  })
 
 export const LESSON_JSON_SCHEMA: JsonSchema = obj({
   title: str(),
@@ -91,7 +92,16 @@ export const LESSON_JSON_SCHEMA: JsonSchema = obj({
   explainRubric: arr(str(), '4-6 points a good explanation covers.')
 })
 
-export const QUESTIONS_JSON_SCHEMA: JsonSchema = obj({ questions: arr(quizQuestionJson) })
+/**
+ * The quiz schema with "type" limited to `types`. A local model gets this
+ * narrower one: Ollama turns the schema into a grammar, so the model can't
+ * write a question type the learner turned off.
+ */
+export function questionsJsonSchema(types: readonly QuestionType[]): JsonSchema {
+  return obj({ questions: arr(quizQuestionJson(types)) })
+}
+
+export const QUESTIONS_JSON_SCHEMA: JsonSchema = questionsJsonSchema(QUESTION_TYPES)
 
 export const FLASHCARDS_JSON_SCHEMA: JsonSchema = obj({
   cards: arr(
@@ -295,6 +305,121 @@ export function finalizeQuestion(draft: QuestionDraft, topicId: ID | null): Ques
   }
 }
 
+// ---------------------------------------------------------------------------
+// Repairs for local models
+// ---------------------------------------------------------------------------
+//
+// A small local model gets the JSON shape right (Ollama enforces the schema)
+// but makes slips Claude doesn't: options lettered "A) ...", an answer like
+// "C) O(n)" or "O(n).", a true/false question written as multiple choice, a
+// blank entry in a list, "None" in a list that should be empty, a date
+// written out in words, a topic title reworded with "&". With `lenient`, the
+// parsers repair these before the usual checks instead of throwing a whole
+// answer away; anything ambiguous is still rejected. Claude's answers are
+// parsed without it, exactly as before.
+
+const OPTION_LETTER = /^\(?([A-Ea-e])[).:]\s+/
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function isBlank(value: unknown): boolean {
+  return typeof value === 'string' && !value.trim()
+}
+
+function letterIndex(letter: string): number {
+  return letter.toUpperCase().charCodeAt(0) - 65
+}
+
+/** An option or answer without its letter, final period, spacing and case, for matching. */
+function choiceKey(text: string): string {
+  return text.trim().replace(OPTION_LETTER, '').replace(/[.\s]+$/, '').toLowerCase()
+}
+
+/** The option an answer names, or null when that isn't certain. */
+function resolveChoice(options: string[], raw: string): string | null {
+  const answer = raw.trim()
+  const exact = options.find((o) => o === answer) ?? options.find((o) => o.toLowerCase() === answer.toLowerCase())
+  if (exact) return exact
+  const bare = /^\(?([A-Ea-e])[).:]?$/.exec(answer)
+  if (bare) return options[letterIndex(bare[1])] ?? null
+  const byText = options.filter((o) => choiceKey(o) === choiceKey(answer))
+  if (byText.length !== 1) return null
+  // "C) O(n)": the letter has to point at the option the text names.
+  const lettered = OPTION_LETTER.exec(answer)
+  if (lettered && options[letterIndex(lettered[1])] !== byText[0]) return null
+  return byText[0]
+}
+
+/**
+ * Fixes a local model's multiple-choice slips: letters in front of the
+ * options, an answer that names its option with a letter or a final period,
+ * and ["True", "False"] options (made a true/false question when `allowTf`).
+ * Other question types pass through unchanged.
+ */
+export function repairChoiceQuestion<T extends { type: QuestionType; options: string[]; answer: string }>(question: T, allowTf: boolean): T {
+  if (question.type !== 'mc') return question
+  let options = question.options.map((o) => o.trim()).filter(Boolean)
+  if (options.length >= 2 && options.every((o, i) => OPTION_LETTER.exec(o)?.[1].toUpperCase() === String.fromCharCode(65 + i))) {
+    options = options.map((o) => o.replace(OPTION_LETTER, ''))
+  }
+  const answer = resolveChoice(options, question.answer) ?? question.answer
+  const isTrueFalse = options.length === 2 && options.every((o) => /^(true|false)$/i.test(o)) && options[0].toLowerCase() !== options[1].toLowerCase()
+  if (allowTf && isTrueFalse) return { ...question, type: 'tf', options: [...TF_OPTIONS], answer } as T
+  return { ...question, options, answer }
+}
+
+/** Drops blank entries from a lesson's lists: a trailing "" rubric point, a key term without a definition. */
+function tidyLessonJson(json: unknown): unknown {
+  if (!isRecord(json)) return json
+  const strings = (value: unknown): unknown => (Array.isArray(value) ? value.filter((v) => !isBlank(v)) : value)
+  return {
+    ...json,
+    explainRubric: strings(json.explainRubric),
+    connections: strings(json.connections),
+    keyTerms: Array.isArray(json.keyTerms) ? json.keyTerms.filter((k) => !(isRecord(k) && (isBlank(k.term) || isBlank(k.definition)))) : json.keyTerms
+  }
+}
+
+/** Drops cards with a blank front or back, so one doesn't throw away the deck. */
+function tidyFlashcardsJson(json: unknown): unknown {
+  if (!isRecord(json) || !Array.isArray(json.cards)) return json
+  return { ...json, cards: json.cards.filter((card) => !(isRecord(card) && (isBlank(card.front) || isBlank(card.back)))) }
+}
+
+/** "None", "N/A", "No misconceptions found." standing in for an empty list. */
+const PLACEHOLDER_ENTRY = /^(none|n\/a|nothing|no (misconceptions?|gaps?|issues?|errors?|mistakes?)( (found|identified))?)\.?$/i
+
+const MONTHS = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december']
+
+/** A date written out ("October 20, 2026", "Tue, Oct. 20 2026", "20 October 2026") as YYYY-MM-DD, or null. */
+export function parseWrittenDate(text: string): string | null {
+  const flat = text
+    .trim()
+    .replace(/,/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/^(mon|tue|wed|thu|fri|sat|sun)[a-z]*\.? /i, '')
+  const monthFirst = /^([a-z]+)\.? (\d{1,2})(?:st|nd|rd|th)? (\d{4})$/i.exec(flat)
+  const dayFirst = /^(\d{1,2})(?:st|nd|rd|th)? ([a-z]+)\.? (\d{4})$/i.exec(flat)
+  const [month, day, year] = monthFirst ? [monthFirst[1], monthFirst[2], monthFirst[3]] : dayFirst ? [dayFirst[2], dayFirst[1], dayFirst[3]] : []
+  if (!month || !day || !year) return null
+  const name = month.toLowerCase()
+  const index = MONTHS.findIndex((m) => m === name || (name.length >= 3 && m.startsWith(name)))
+  if (index < 0) return null
+  const iso = `${year}-${String(index + 1).padStart(2, '0')}-${day.padStart(2, '0')}`
+  return isValidLocalDate(iso) ? iso : null
+}
+
+/** A topic title for loose matching: "&" read as "and", punctuation and spacing ignored. */
+function looseTitleKey(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim()
+}
+
 function finalizeLessonQuestion(raw: RawLessonQuestion, topicId: ID, where: string): Question {
   const result = finalizeQuestion({ ...raw, acceptable: [] }, topicId)
   if (typeof result === 'string') throw new OutputError(`${where}: ${result}.`)
@@ -308,15 +433,17 @@ function finalizeLessonQuestion(raw: RawLessonQuestion, topicId: ID, where: stri
 const MAX_KEY_TERMS = 10
 const MAX_RUBRIC = 6
 
-export function parseLessonOutput(json: unknown, context: { topic: TopicBrief; sourceNames: string[] }): LessonContent {
-  const raw = parseWith(rawLessonSchema, json)
+/** `lenient`: repair a local model's slips first (see "Repairs for local models"). */
+export function parseLessonOutput(json: unknown, context: { topic: TopicBrief; sourceNames: string[]; lenient?: boolean }): LessonContent {
+  const raw = parseWith(rawLessonSchema, context.lenient ? tidyLessonJson(json) : json)
   const topicId = context.topic.id
-  const warmup = raw.warmup.slice(0, 2).map((q, i) => finalizeLessonQuestion(q, topicId, `warmup ${i + 1}`))
+  const repair = (q: RawLessonQuestion): RawLessonQuestion => (context.lenient ? repairChoiceQuestion(q, true) : q)
+  const warmup = raw.warmup.slice(0, 2).map((q, i) => finalizeLessonQuestion(repair(q), topicId, `warmup ${i + 1}`))
   const chunks: LessonChunk[] = raw.chunks.map((chunk, i) => ({
     heading: chunk.heading.trim(),
     body: chunk.body.trim(),
     example: chunk.example.trim(),
-    check: finalizeLessonQuestion(chunk.check, topicId, `chunk ${i + 1} check`)
+    check: finalizeLessonQuestion(repair(chunk.check), topicId, `chunk ${i + 1} check`)
   }))
   const seenTerms = new Set<string>()
   const keyTerms: KeyTerm[] = []
@@ -345,6 +472,8 @@ export interface QuestionsContext {
   primaryTopicId: ID | null
   types: QuestionType[]
   difficulty: Difficulty | 'mixed'
+  /** Repair a local model's slips first (see "Repairs for local models"). */
+  lenient?: boolean
 }
 
 export interface ParsedQuestions {
@@ -372,7 +501,7 @@ export function parseQuestionsOutput(json: unknown, context: QuestionsContext): 
       rejected.push(`question ${i + 1} did not match the schema`)
       return
     }
-    const q = parsed.data
+    const q = context.lenient ? repairChoiceQuestion(parsed.data, allowed.has('tf')) : parsed.data
     if (!allowed.has(q.type)) {
       rejected.push(`question ${i + 1} used type "${q.type}", which was not allowed`)
       return
@@ -393,8 +522,9 @@ export function promptKey(prompt: string): string {
     .trim()
 }
 
-export function parseFlashcardsOutput(json: unknown, context: { count: number }): GeneratedCard[] {
-  const raw = parseWith(rawFlashcardsSchema, json)
+/** `lenient`: drop blank cards instead of rejecting the deck (see "Repairs for local models"). */
+export function parseFlashcardsOutput(json: unknown, context: { count: number; lenient?: boolean }): GeneratedCard[] {
+  const raw = parseWith(rawFlashcardsSchema, context.lenient ? tidyFlashcardsJson(json) : json)
   const seen = new Set<string>()
   const cards: GeneratedCard[] = []
   for (const card of raw.cards) {
@@ -409,13 +539,18 @@ export function parseFlashcardsOutput(json: unknown, context: { count: number })
   return cards.slice(0, context.count)
 }
 
-export function parseExplanationOutput(json: unknown): ExplanationFeedback {
+/** `lenient`: drop "None"-style placeholder entries (see "Repairs for local models"). */
+export function parseExplanationOutput(json: unknown, options: { lenient?: boolean } = {}): ExplanationFeedback {
   const raw = parseWith(rawExplanationSchema, json)
+  const list = (values: string[]): string[] => {
+    const unique = uniqueTrimmed(values)
+    return options.lenient ? unique.filter((v) => !PLACEHOLDER_ENTRY.test(v)) : unique
+  }
   return {
     score: clamp(Math.round(raw.score), 0, 100),
-    covered: uniqueTrimmed(raw.covered),
-    missing: uniqueTrimmed(raw.missing),
-    misconceptions: uniqueTrimmed(raw.misconceptions),
+    covered: list(raw.covered),
+    missing: list(raw.missing),
+    misconceptions: list(raw.misconceptions),
     suggestion: raw.suggestion.trim()
   }
 }
@@ -431,7 +566,8 @@ export function isValidLocalDate(value: string): boolean {
   return date.getUTCFullYear() === y && date.getUTCMonth() === m - 1 && date.getUTCDate() === d
 }
 
-export function parseSyllabusOutput(json: unknown, context: { existingTopicTitles: string[] }): SyllabusExtraction {
+/** `lenient`: accept written-out dates and loosely matching topic titles (see "Repairs for local models"). */
+export function parseSyllabusOutput(json: unknown, context: { existingTopicTitles: string[]; lenient?: boolean }): SyllabusExtraction {
   const raw = parseWith(rawSyllabusSchema, json)
   const titleKey = (title: string): string => title.trim().toLowerCase().replace(/\s+/g, ' ')
   const existing = new Map(context.existingTopicTitles.map((t) => [titleKey(t), t.trim()]))
@@ -446,15 +582,21 @@ export function parseSyllabusOutput(json: unknown, context: { existingTopicTitle
     topics.push({ title, description: topic.description.trim(), unitLabel: topic.unitLabel.trim() })
   }
 
+  const loose = new Map<string, string>()
+  if (context.lenient) {
+    for (const title of [...existing.values(), ...outputTitles.values()]) loose.set(looseTitleKey(title), title)
+  }
+  const knownTitle = (t: string): string =>
+    outputTitles.get(titleKey(t)) ?? existing.get(titleKey(t)) ?? (context.lenient ? loose.get(looseTitleKey(t)) : undefined) ?? ''
+
   const exams: SyllabusExtraction['exams'] = raw.exams
     .filter((exam) => exam.name.trim())
     .map((exam) => {
       const date = exam.examDate?.trim() ?? ''
+      const examDate = isValidLocalDate(date) ? date : context.lenient ? parseWrittenDate(date) : null
       // Exams can cover topics extracted earlier, so existing titles count as matches too.
-      const covers = uniqueTrimmed(
-        exam.coversTopicTitles.map((t) => outputTitles.get(titleKey(t)) ?? existing.get(titleKey(t)) ?? '').filter(Boolean)
-      )
-      return { name: exam.name.trim(), examDate: isValidLocalDate(date) ? date : null, coversTopicTitles: covers }
+      const covers = uniqueTrimmed(exam.coversTopicTitles.map(knownTitle).filter(Boolean))
+      return { name: exam.name.trim(), examDate, coversTopicTitles: covers }
     })
 
   return { courseCode: raw.courseCode.trim(), topics, exams }

@@ -21,7 +21,7 @@ class TestStudyAi extends StudyAi {
 }
 
 function aiWith(responses: ScriptedResponse[], model: AiModelId = 'claude-opus-5-5', retrieveError?: unknown): TestStudyAi {
-  return new TestStudyAi({ apiKey: 'sk-ant-test', model, demo: false }, new FakeClient(responses, retrieveError))
+  return new TestStudyAi({ provider: 'claude', apiKey: 'sk-ant-test', model, demo: false }, new FakeClient(responses, retrieveError))
 }
 
 const topic: TopicBrief = { id: 'topic-stacks', title: 'Stacks', description: 'LIFO stacks and their operations.', unitLabel: 'Week 2' }
@@ -63,7 +63,7 @@ function tf(prompt: string, topicIndex = 1): Record<string, unknown> {
 const questionsJson = (...questions: Record<string, unknown>[]): string => JSON.stringify({ questions })
 
 describe('StudyAi without an API key', () => {
-  const ai = new StudyAi(() => ({ apiKey: null, model: 'claude-opus-5-5', demo: false }))
+  const ai = new StudyAi(() => ({ provider: 'claude', apiKey: null, model: 'claude-opus-5-5', demo: false }))
   const lesson = {} as LessonContent
 
   it('rejects every AI call with NO_API_KEY', async () => {
@@ -108,7 +108,7 @@ describe('testConnection', () => {
   })
 
   it('says so in demo mode', async () => {
-    const ai = new StudyAi(() => ({ apiKey: null, model: 'claude-opus-5-5', demo: true }))
+    const ai = new StudyAi(() => ({ provider: 'claude', apiKey: null, model: 'claude-opus-5-5', demo: true }))
     await expect(ai.testConnection()).resolves.toMatchObject({ ok: true })
   })
 })
@@ -227,7 +227,7 @@ describe('other tasks', () => {
   })
 
   it('writes flashcards from the lesson', async () => {
-    const lesson = await new StudyAi(() => ({ apiKey: null, model: 'claude-opus-5-5', demo: true })).generateLesson({ notebookName: 'DS', topic, sources, otherTopics: [] })
+    const lesson = await new StudyAi(() => ({ provider: 'claude', apiKey: null, model: 'claude-opus-5-5', demo: true })).generateLesson({ notebookName: 'DS', topic, sources, otherTopics: [] })
     const cards = Array.from({ length: 4 }, (_, i) => ({ front: `Why is pop O(1) (${i})?`, back: 'It only touches the top.', sourceRef: '' }))
     const ai = aiWith([{ text: JSON.stringify({ cards }) }])
     await expect(ai.generateFlashcards({ notebookName: 'DS', topic, lesson, sources, count: 4 })).resolves.toHaveLength(4)

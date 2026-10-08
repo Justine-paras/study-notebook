@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { AiTask, ID } from '@shared/types'
 import { useAiProgress } from '../lib/aiProgress'
 import { formatClock } from '../lib/format'
+import { useLocalAi } from '../lib/useLocalAi'
 import { ProgressBar } from './ui/ProgressBar'
 import { Spinner } from './ui/Spinner'
 import './AiWorking.css'
@@ -16,12 +17,31 @@ export const AI_TASK_TITLES: Record<AiTask, string> = {
 }
 
 export const AI_TASK_EXPLANATIONS: Record<AiTask, string> = {
-  syllabus: 'Reading your syllabus to list the topics in course order and any exam dates. This usually takes about a minute.',
-  lesson: 'Reading your files and writing an in-depth lesson in small parts. This usually takes one to two minutes.',
-  quiz: 'Writing questions from your files and mixing in earlier topics. This can take a minute or two.',
-  flashcards: 'Turning the lesson and your mistakes into flashcards. This can take up to a minute.',
-  explanation: 'Comparing your explanation with the lesson and your files to see what is covered and what is missing. This takes about half a minute.',
-  summary: 'Reading the file and writing a short summary of its main points. This can take a minute.'
+  syllabus: 'Reading your syllabus to list the topics in course order and any exam dates.',
+  lesson: 'Reading your files and writing an in-depth lesson in small parts.',
+  quiz: 'Writing questions from your files and mixing in earlier topics.',
+  flashcards: 'Turning the lesson and your mistakes into flashcards.',
+  explanation: 'Comparing your explanation with the lesson and your files to see what is covered and what is missing.',
+  summary: 'Reading the file and writing a short summary of its main points.'
+}
+
+/** How long each task usually takes with Claude. */
+export const AI_TASK_DURATIONS: Record<AiTask, string> = {
+  syllabus: 'This usually takes about a minute.',
+  lesson: 'This usually takes one to two minutes.',
+  quiz: 'This can take a minute or two.',
+  flashcards: 'This can take up to a minute.',
+  explanation: 'This takes about half a minute.',
+  summary: 'This can take a minute.'
+}
+
+/** Ollama on the learner's own computer is several times slower than Claude, whatever the task. */
+export const LOCAL_AI_DURATION = 'Ollama is writing this on your computer, so it can take several minutes.'
+
+/** The calm note under the progress bar. Claude's custom explanations already leave out timing, so they stay as they are. */
+export function aiWorkingExplanation(task: AiTask, custom: string | undefined, local: boolean): string {
+  if (custom !== undefined) return local ? `${custom} ${LOCAL_AI_DURATION}` : custom
+  return `${AI_TASK_EXPLANATIONS[task]} ${local ? LOCAL_AI_DURATION : AI_TASK_DURATIONS[task]}`
 }
 
 function secondsSince(time: number): number {
@@ -60,6 +80,7 @@ export function AiWorking({ task, title, explanation, compact = false, startedAt
   const [mountedAt] = useState(() => Date.now())
   const startedAt = jobStartedAt ?? mountedAt
   const progress = useAiProgress(task, startedAt, subjectId)
+  const local = useLocalAi()
   const [elapsed, setElapsed] = useState(() => secondsSince(startedAt))
 
   useEffect(() => {
@@ -95,7 +116,7 @@ export function AiWorking({ task, title, explanation, compact = false, startedAt
       <div className="ai-working__message" aria-live="polite">
         {message ?? 'Starting…'}
       </div>
-      {!compact && <p className="ai-working__explanation">{explanation ?? AI_TASK_EXPLANATIONS[task]}</p>}
+      {!compact && <p className="ai-working__explanation">{aiWorkingExplanation(task, explanation, local)}</p>}
       {!compact && <p className="hand hand--sm ai-working__note">you can leave this page: it keeps going and tells you when it's done</p>}
     </div>
   )

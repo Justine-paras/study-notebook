@@ -94,7 +94,7 @@ class WireStudyAi extends StudyAi {
     private readonly sdk: Anthropic,
     model: AiModelId
   ) {
-    super(() => ({ apiKey: 'sk-ant-test-key', model, demo: false }))
+    super(() => ({ provider: 'claude', apiKey: 'sk-ant-test-key', model, demo: false }))
   }
 
   protected override clientFor(): AiClient {

@@ -587,9 +587,9 @@ export interface AiProgressEvent {
 export type AppErrorCode =
   | 'NO_API_KEY'
   | 'INVALID_API_KEY'
-  /** Ollama is selected but its server can't be reached (not installed, not running, wrong address). */
+  /** Ollama is selected but its server can't be reached (not installed, not running, wrong address) or stopped responding. */
   | 'OLLAMA_UNREACHABLE'
-  /** Ollama is selected but no model is chosen, or the chosen model isn't installed. */
+  /** Ollama is selected but no model is chosen, or the chosen model isn't installed or can't run (not a chat model, out of memory). */
   | 'NO_AI_MODEL'
   | 'RATE_LIMITED'
   | 'AI_REFUSED'

@@ -2,14 +2,19 @@
 // then applies the character budget (see sourceBudget.ts).
 
 import type { AiModelId, ID, SourceKind, Topic } from '@shared/types'
+import { ollamaSourceCharBudget, ollamaSourceChars } from '../ai/ollama'
 import type { AppContext } from '../context'
 import { listReadySourceTexts, type SourceWithText } from '../db/repositories/sources'
 import { readStoredSettings } from './settings'
-import { SOURCE_CHAR_BUDGET, selectSources, type CandidateSource, type SourceSelection } from './sourceBudget'
+import { SOURCE_CHAR_BUDGET, selectSources, type CandidateSource, type RelevanceQuery, type SourceSelection } from './sourceBudget'
 
 /** Past exams and quizzes teach question style, not content. */
 const STYLE_KINDS: readonly SourceKind[] = ['exam', 'quiz']
-/** Share of the budget style examples may use in quizzes, so they never crowd out the content. */
+/**
+ * Share of the budget style examples may use in quizzes, so they never crowd
+ * out the content: 90,000 characters; for a local model, a quarter of its
+ * much smaller budget.
+ */
 const STYLE_BUDGET = 90_000
 
 /**
@@ -24,8 +29,50 @@ export function sourceCharBudget(model: AiModelId): number {
   return model === 'claude-haiku-4-5' ? HAIKU_CHAR_BUDGET : SOURCE_CHAR_BUDGET
 }
 
-function budgetFor(ctx: AppContext): number {
-  return sourceCharBudget(readStoredSettings(ctx).model)
+/** Characters of source text one AI call may carry with the chosen provider and model. */
+export function budgetFor(ctx: AppContext): number {
+  const settings = readStoredSettings(ctx)
+  return settings.aiProvider === 'ollama' ? ollamaSourceCharBudget(settings.ollamaContextTokens) : sourceCharBudget(settings.model)
+}
+
+/**
+ * Budget for a call about one whole file (reading a syllabus, summarizing a
+ * file). Claude reads up to SOURCE_CHAR_BUDGET whatever the model, as it
+ * always has; a local model gets what fits its context window.
+ */
+export function singleSourceBudget(ctx: AppContext): number {
+  const settings = readStoredSettings(ctx)
+  return settings.aiProvider === 'ollama' ? ollamaSourceCharBudget(settings.ollamaContextTokens) : SOURCE_CHAR_BUDGET
+}
+
+/**
+ * Runs `select` with `budget` and, for a local model, makes sure the result
+ * fits its context window. The budget counts characters at the rate of
+ * English text; files in another script (Chinese is about one token per
+ * character, three times English) take more tokens per character, so the
+ * selection is made again with a proportionally smaller budget. Claude's
+ * selection is used as it is.
+ */
+function selectWithinBudget(ctx: AppContext, budget: number, select: (budget: number) => SourceSelection): SourceSelection {
+  let selection = select(budget)
+  if (readStoredSettings(ctx).aiProvider !== 'ollama') return selection
+  // Each pass picks different text, so its density can differ a little: a few passes settle it.
+  for (let pass = 0; pass < 3; pass++) {
+    const chars = selection.docs.reduce((sum, doc) => sum + doc.text.length, 0)
+    const size = selection.docs.reduce((sum, doc) => sum + ollamaSourceChars(doc.text), 0)
+    if (size <= budget || chars === 0) break
+    const smaller = select(Math.floor((budget * chars) / size))
+    // Nothing fits at all: keep the oversized one, which the call refuses with advice, rather than silently send no files.
+    if (smaller.docs.length === 0) break
+    selection = smaller
+  }
+  return selection
+}
+
+/** The selection for a call about one whole file (reading a syllabus, summarizing a file); with no topic, the cut keeps the opening pages. */
+export function selectWholeFile(ctx: AppContext, candidate: CandidateSource): SourceSelection {
+  const query: RelevanceQuery = { titles: [], descriptions: [] }
+  return selectWithinBudget(ctx, singleSourceBudget(ctx), (budget) => selectSources([candidate], query, { budget }))
 }
 
 function toCandidate(source: SourceWithText): CandidateSource {
@@ -58,10 +105,11 @@ function queryFor(topics: Topic[]): { titles: string[]; descriptions: string[] }
 /** Sources for a lesson, its flashcards, or grading an explanation. */
 export function selectTopicSources(ctx: AppContext, topic: Topic): SourceSelection {
   const ready = listReadySourceTexts(ctx.db, topic.notebookId)
-  return selectSources(contentCandidates(ready, [topic]), queryFor([topic]), {
-    budget: budgetFor(ctx),
-    allowDescriptionOnly: topic.description.trim().length > 0
-  })
+  const candidates = contentCandidates(ready, [topic])
+  const query = queryFor([topic])
+  return selectWithinBudget(ctx, budgetFor(ctx), (budget) =>
+    selectSources(candidates, query, { budget, allowDescriptionOnly: topic.description.trim().length > 0 })
+  )
 }
 
 /**
@@ -73,11 +121,25 @@ export function selectQuizSources(ctx: AppContext, notebookId: ID, topics: Topic
   const ready = listReadySourceTexts(ctx.db, notebookId)
   const query = queryFor(topics)
   const allowDescriptionOnly = topics.some((t) => t.description.trim().length > 0)
-
+  const local = readStoredSettings(ctx).aiProvider === 'ollama'
   const styleCandidates = includeStyle ? ready.filter((s) => STYLE_KINDS.includes(s.kind)).map(toCandidate) : []
   const content = contentCandidates(ready, topics).filter((c) => !styleCandidates.some((s) => s.id === c.id))
+  return selectWithinBudget(ctx, budgetFor(ctx), (budget) =>
+    selectQuizSourcesWithin(budget, local ? Math.min(STYLE_BUDGET, Math.floor(budget / 4)) : STYLE_BUDGET, content, styleCandidates, query, allowDescriptionOnly)
+  )
+}
+
+/** selectQuizSources at one budget: past exams and quizzes within their share, then the content in the rest. */
+function selectQuizSourcesWithin(
+  budget: number,
+  styleBudget: number,
+  content: CandidateSource[],
+  styleCandidates: CandidateSource[],
+  query: RelevanceQuery,
+  allowDescriptionOnly: boolean
+): SourceSelection {
   const style =
-    styleCandidates.length > 0 ? selectSources(styleCandidates, query, { budget: STYLE_BUDGET, allowDescriptionOnly: true }) : null
+    styleCandidates.length > 0 ? selectSources(styleCandidates, query, { budget: styleBudget, allowDescriptionOnly: true }) : null
   const styleChars = style?.usedChars ?? 0
   const hasStyleDocs = (style?.docs.length ?? 0) > 0
 
@@ -85,7 +147,7 @@ export function selectQuizSources(ctx: AppContext, notebookId: ID, topics: Topic
   if (content.length === 0 && hasStyleDocs) {
     main = { docs: [], labels: [], usedChars: 0 }
   } else {
-    main = selectSources(content, query, { budget: budgetFor(ctx) - styleChars, allowDescriptionOnly: allowDescriptionOnly || hasStyleDocs })
+    main = selectSources(content, query, { budget: budget - styleChars, allowDescriptionOnly: allowDescriptionOnly || hasStyleDocs })
     if (main.docs.length === 0 && hasStyleDocs) main = { docs: [], labels: [], usedChars: 0 }
   }
   if (!style || !hasStyleDocs) return main

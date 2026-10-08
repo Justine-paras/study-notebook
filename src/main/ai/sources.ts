@@ -45,6 +45,23 @@ export function documentBlocks(sources: AiSourceDoc[]): BetaRequestDocumentBlock
   }))
 }
 
+/**
+ * The same documents as plain text for a model without document blocks
+ * (Ollama): each file in its own clearly delimited <document> with its name
+ * and what kind of file it is, in the same stable order, so a local model
+ * can reuse its cached prompt prefix across calls too. Empty when no file
+ * has text.
+ */
+export function documentsText(sources: AiSourceDoc[]): string {
+  const ordered = orderSources(sources)
+  if (ordered.length === 0) return ''
+  const documents = ordered.map(
+    (source, i) =>
+      `<document index="${i + 1}">\n<title>${source.name}</title>\n<context>${KIND_CONTEXT[source.kind]}</context>\n<document_content>\n${source.text.trim()}\n</document_content>\n</document>`
+  )
+  return `Course files (${ordered.length}):\n<documents>\n${documents.join('\n')}\n</documents>`
+}
+
 // ---------------------------------------------------------------------------
 // Text analysis (used by demo mode)
 // ---------------------------------------------------------------------------

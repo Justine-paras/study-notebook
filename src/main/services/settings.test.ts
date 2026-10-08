@@ -3,7 +3,10 @@ import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AppError } from '@shared/errors'
+import { OLLAMA_CONTEXT_SIZES } from '@shared/types'
 import { createTestContext, type TestContext } from '../../../tests/unit/helpers/context'
+import { forgetOllamaModelFacts } from '../ai/ollama'
+import { closedPortUrl, FakeOllama } from '../ai/ollamaTestkit'
 import {
   DEFAULT_SETTINGS,
   clearApiKey,
@@ -12,6 +15,7 @@ import {
   getSettings,
   getThemePreference,
   isLiveDatabaseFile,
+  listOllamaModels,
   openDataFolder,
   readStoredSettings,
   setApiKey,
@@ -44,6 +48,12 @@ function expectInvalid(fn: () => unknown): void {
 
 async function expectInvalidAsync(promise: Promise<unknown>): Promise<void> {
   await expect(promise).rejects.toMatchObject({ code: 'INVALID_INPUT' })
+}
+
+function claudeApiKey(c: TestContext): string | null {
+  const config = getAiConfig(c)
+  if (config.provider !== 'claude') throw new Error('expected the Claude configuration')
+  return config.apiKey
 }
 
 describe('validateSettingsUpdate', () => {
@@ -139,27 +149,27 @@ describe('API key', () => {
     expect(JSON.stringify(settings)).not.toContain('sk-ant-test-123')
     const stored = ctx.db.prepare("SELECT value FROM settings WHERE key = 'apiKey'").get() as { value: string }
     expect(stored.value).not.toContain('sk-ant-test-123')
-    expect(getAiConfig(ctx)).toEqual({ apiKey: 'sk-ant-test-123', model: 'claude-opus-5-5', demo: false })
+    expect(getAiConfig(ctx)).toEqual({ provider: 'claude', apiKey: 'sk-ant-test-123', model: 'claude-opus-5-5', demo: false })
 
     expect((await clearApiKey(ctx)).hasApiKey).toBe(false)
-    expect(getAiConfig(ctx).apiKey).toBeNull()
+    expect(claudeApiKey(ctx)).toBeNull()
   })
 
   it('falls back to ANTHROPIC_API_KEY, and a stored key wins over it', async () => {
     vi.stubEnv('ANTHROPIC_API_KEY', 'sk-ant-from-env')
-    expect(getAiConfig(ctx).apiKey).toBe('sk-ant-from-env')
+    expect(claudeApiKey(ctx)).toBe('sk-ant-from-env')
     expect((await getSettings(ctx)).hasApiKey).toBe(true)
     await setApiKey(ctx, 'sk-ant-stored')
-    expect(getAiConfig(ctx).apiKey).toBe('sk-ant-stored')
+    expect(claudeApiKey(ctx)).toBe('sk-ant-stored')
   })
 
   it('treats a key that no longer decrypts as missing', async () => {
     ctx.db.prepare("INSERT INTO settings (key, value) VALUES ('apiKey', '\"enc:garbage\"')").run()
-    expect(getAiConfig(ctx).apiKey).toBeNull()
+    expect(claudeApiKey(ctx)).toBeNull()
     // Settings must ask for the key again rather than claim one is saved.
     expect((await getSettings(ctx)).hasApiKey).toBe(false)
     expect((await setApiKey(ctx, 'sk-ant-again')).hasApiKey).toBe(true)
-    expect(getAiConfig(ctx).apiKey).toBe('sk-ant-again')
+    expect(claudeApiKey(ctx)).toBe('sk-ant-again')
   })
 
   it('reports demo mode from the context', () => {
@@ -209,5 +219,99 @@ describe('exportBackup', () => {
     expect(copy.prepare("SELECT COUNT(*) AS n FROM settings WHERE key = 'apiKey'").get()).toEqual({ n: 1 })
     copy.close()
     expect(readdirSync(ctx.tempDir).filter((name) => name.endsWith('.tmp'))).toEqual([])
+  })
+})
+
+describe('AI provider settings', () => {
+  it('builds the Ollama configuration from the saved settings', async () => {
+    await updateSettings(ctx, { aiProvider: 'ollama', ollamaUrl: ' localhost:11500/ ', ollamaModel: ' qwen3:8b ', ollamaContextTokens: 32768 })
+    expect(getAiConfig(ctx)).toEqual({ provider: 'ollama', baseUrl: 'http://localhost:11500', model: 'qwen3:8b', contextTokens: 32768, demo: false })
+    expect(readStoredSettings(ctx)).toMatchObject({ aiProvider: 'ollama', ollamaUrl: 'http://localhost:11500', ollamaModel: 'qwen3:8b' })
+    await updateSettings(ctx, { ollamaModel: null })
+    expect(getAiConfig(ctx)).toMatchObject({ provider: 'ollama', model: null })
+
+    // Switching back to Claude keeps the Ollama choices for later.
+    await updateSettings(ctx, { aiProvider: 'claude' })
+    expect(getAiConfig(ctx)).toEqual({ provider: 'claude', apiKey: null, model: 'claude-opus-5-5', demo: false })
+    expect(readStoredSettings(ctx).ollamaUrl).toBe('http://localhost:11500')
+  })
+
+  it('keeps hasApiKey meaning a Claude key is available, whatever the provider', async () => {
+    await updateSettings(ctx, { aiProvider: 'ollama' })
+    expect((await getSettings(ctx)).hasApiKey).toBe(false)
+    await setApiKey(ctx, 'sk-ant-kept')
+    expect((await getSettings(ctx)).hasApiKey).toBe(true)
+    expect(getAiConfig(ctx)).not.toHaveProperty('apiKey')
+    await updateSettings(ctx, { aiProvider: 'claude' })
+    expect(claudeApiKey(ctx)).toBe('sk-ant-kept')
+  })
+
+  it('reports demo mode for Ollama too', async () => {
+    const demo = createTestContext({ demoAi: true })
+    await updateSettings(demo, { aiProvider: 'ollama' })
+    expect(getAiConfig(demo)).toMatchObject({ provider: 'ollama', demo: true })
+    demo.cleanup()
+  })
+
+  it('accepts every listed context size and valid model names', () => {
+    for (const size of OLLAMA_CONTEXT_SIZES) expect(validateSettingsUpdate({ ollamaContextTokens: size })).toEqual({ ollamaContextTokens: size })
+    for (const name of ['qwen3:8b', 'llama3.2', 'hf.co/user/repo:Q4_K_M', 'my-model_v2.1:latest', 'library/gemma3@sha256']) {
+      expect(validateSettingsUpdate({ ollamaModel: name })).toEqual({ ollamaModel: name })
+    }
+    expect(validateSettingsUpdate({ aiProvider: 'ollama', ollamaUrl: 'https://box.local:8443' })).toEqual({ aiProvider: 'ollama', ollamaUrl: 'https://box.local:8443' })
+  })
+
+  const junk: unknown[] = [null, true, 0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, '', ' ', [], {}, ['ollama'], () => 'ollama', Symbol('x'), 'x'.repeat(10_000)]
+  const cases: [string, unknown[]][] = [
+    ['aiProvider', [...junk, 'Claude', 'OLLAMA', 'openai', 'claude ']],
+    ['ollamaUrl', [...junk.filter((v) => v !== null), 'ftp://host', 'file:///etc/passwd', 'http://user:pass@host', 'http://host?x=1', 'http://host/#frag', 'http://', `http://${'a'.repeat(300)}.com`, 'javascript:alert(1)']],
+    ['ollamaModel', [...junk.filter((v) => v !== null), 'qwen3 8b', 'model;rm -rf', 'a\nb', '<script>', 'café', 'x'.repeat(201)]],
+    ['ollamaContextTokens', [...junk, 4096, 8191, 8192.5, 262144, '8192', 2 ** 53]]
+  ]
+  it.each(cases)('rejects bad values for %s', (field, values) => {
+    for (const value of values) expectInvalid(() => validateSettingsUpdate({ [field]: value }))
+  })
+
+  it('falls back to the defaults for corrupt stored Ollama values', () => {
+    ctx.db
+      .prepare(
+        "INSERT INTO settings (key, value) VALUES ('aiProvider', '\"gpt\"'), ('ollamaUrl', '\"ftp://x\"'), ('ollamaModel', '42'), ('ollamaContextTokens', '1234')"
+      )
+      .run()
+    expect(readStoredSettings(ctx)).toMatchObject({ aiProvider: 'claude', ollamaUrl: 'http://127.0.0.1:11434', ollamaModel: null, ollamaContextTokens: 16384 })
+  })
+})
+
+describe('listOllamaModels', () => {
+  let fake: FakeOllama
+
+  beforeEach(async () => {
+    fake = await FakeOllama.start()
+    fake.tags = { status: 200, body: { models: [{ name: 'qwen3:8b', size: 5, details: { parameter_size: '8.2B', quantization_level: 'Q4_K_M' } }] } }
+  })
+  afterEach(async () => {
+    await fake.close()
+    forgetOllamaModelFacts()
+  })
+
+  it('normalizes an address typed before saving it', async () => {
+    const typed = ` ${fake.url.replace('http://', '')}/ `
+    await expect(listOllamaModels(ctx, typed)).resolves.toEqual({
+      ok: true,
+      message: 'Found 1 model in Ollama.',
+      models: [{ name: 'qwen3:8b', sizeBytes: 5, parameterSize: '8.2B', quantization: 'Q4_K_M' }]
+    })
+    expect(fake.requests.map((r) => r.path)).toEqual(['/api/tags'])
+  })
+
+  it('uses the saved address when none is given', async () => {
+    await updateSettings(ctx, { ollamaUrl: fake.url })
+    await expect(listOllamaModels(ctx)).resolves.toMatchObject({ ok: true })
+  })
+
+  it('rejects a bad address and reports an unreachable one without throwing', async () => {
+    await expectInvalidAsync(listOllamaModels(ctx, 'ftp://example.com'))
+    const url = await closedPortUrl()
+    await expect(listOllamaModels(ctx, url)).resolves.toMatchObject({ ok: false, message: expect.stringContaining(url), models: [] })
   })
 })

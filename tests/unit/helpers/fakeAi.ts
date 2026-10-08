@@ -37,7 +37,7 @@ export class FakeAi extends StudyAi {
   calls: { method: string; sources: AiSourceDoc[]; input: unknown }[] = []
 
   constructor() {
-    super(() => ({ apiKey: null, model: 'claude-opus-5-5', demo: true }))
+    super(() => ({ provider: 'claude', apiKey: null, model: 'claude-opus-5-5', demo: true }))
   }
 
   private record(method: string, sources: AiSourceDoc[], input: unknown, options?: CallOptions): void {

@@ -3,6 +3,7 @@ import type { TopicWithProgress } from '@shared/types'
 import { SOURCE_KIND_LABELS } from '../../lib/format'
 import { useSources } from '../../lib/queries'
 import { ROUTES } from '../../lib/routes'
+import { useLocalAi } from '../../lib/useLocalAi'
 import { AiWorking } from '../AiWorking'
 import { ErrorNotice } from '../ErrorNotice'
 import { Badge, Button, Callout, LoadingBlock, Sheet } from '../ui'
@@ -21,6 +22,7 @@ export interface LessonStartProps {
 /** First visit to a topic: what the lesson will be built from, and "Create my lesson". */
 export function LessonStart({ topic, onGenerate, pending, startedAt, error }: LessonStartProps) {
   const sources = useSources(topic.notebookId)
+  const local = useLocalAi()
 
   if (pending) {
     return <AiWorking task="lesson" title={`Writing your lesson on ${topic.title}`} startedAt={startedAt} subjectId={topic.id} />
@@ -34,7 +36,8 @@ export function LessonStart({ topic, onGenerate, pending, startedAt, error }: Le
     <Sheet raised density="roomy" kicker="a fresh page" title="Create my lesson" className="lesson-start">
       <p className="lesson-start__text">
         Your lesson is written from your own files, in small parts. Each part ends with a quick check, and the topic starts with
-        two warm-up guesses. Writing it takes a minute or two, and you can keep using the app meanwhile.
+        two warm-up guesses. Writing it takes {local ? 'several minutes with Ollama' : 'a minute or two'}, and you can keep using
+        the app meanwhile.
       </p>
 
       {sources.isPending ? (

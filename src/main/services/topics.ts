@@ -19,7 +19,7 @@ import {
 import { transaction } from '../db/sql'
 import { invalid, isLocalDate, newId, notFound, nowIso, optionalText, requireIdList, requireNotebook, requireText, requireTopic, runAiJob } from './common'
 import { loadNotebookTopics } from './progress'
-import { selectSources } from './sourceBudget'
+import { selectWholeFile } from './topicSources'
 
 const TITLE_MAX = 200
 const DESCRIPTION_MAX = 2_000
@@ -156,7 +156,7 @@ export async function extractTopicsFromSyllabus(ctx: AppContext, notebookId: ID,
 
   const before = listTopicRows(ctx.db, notebookId)
   // With an empty query the cut keeps the opening pages, where syllabi list their schedule.
-  const selection = selectSources([{ id: source.id, fileName: source.fileName, kind: source.kind, text }], { titles: [], descriptions: [] })
+  const selection = selectWholeFile(ctx, { id: source.id, fileName: source.fileName, kind: source.kind, text })
   const extraction = await runAiJob(ctx, { task: 'syllabus', subjectId: notebookId }, `Reading ${source.fileName}`, (options) =>
     ctx.ai.extractSyllabus(
       {

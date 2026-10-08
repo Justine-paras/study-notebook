@@ -1,4 +1,6 @@
-// The AI engine: every call to Claude goes through `StudyAi`.
+// The AI engine: every AI call goes through `StudyAi`, which sends it to
+// Claude (the Anthropic API) or to a local model through Ollama, as chosen
+// in Settings. Demo mode wins over both.
 // OWNER: ai agent. Other files in src/main/ai/ (prompts, schemas, demo
 // outputs, client helpers) are the ai agent's to create.
 
@@ -9,6 +11,7 @@ import type {
   ExplanationFeedback,
   ID,
   LessonContent,
+  OllamaContextSize,
   Question,
   QuestionType,
   QuizKind,
@@ -17,14 +20,18 @@ import type {
 import { AppError, ERROR_MESSAGES } from '@shared/errors'
 import { clientForKey, countKey, mapAiError, runStructured, type AiClient, type ProgressPlan } from './client'
 import { demoExplanation, demoFlashcards, demoLesson, demoQuestions, demoSummary, demoSyllabus } from './demo'
+import { ollamaQuestionsPerCall, runOllamaStructured, testOllamaConnection, type OllamaCall, type OllamaTarget } from './ollama'
 import {
+  compactLessonDigest,
+  compactLessonInstruction,
   explanationInstruction,
   flashcardsInstruction,
   lessonDigest,
   lessonInstruction,
   questionsInstruction,
   summaryInstruction,
-  syllabusInstruction
+  syllabusInstruction,
+  type PromptStyle
 } from './prompts'
 import {
   EXPLANATION_JSON_SCHEMA,
@@ -39,18 +46,34 @@ import {
   parseSyllabusOutput,
   promptKey,
   QUESTIONS_JSON_SCHEMA,
+  questionsJsonSchema,
   SUMMARY_JSON_SCHEMA,
   SYLLABUS_JSON_SCHEMA,
   type QuestionsContext
 } from './schemas'
 import { orderSources } from './sources'
 
-export interface AiConfig {
+export interface ClaudeAiConfig {
+  provider: 'claude'
   apiKey: string | null
   model: AiModelId
   /** Offline demo mode: deterministic canned outputs built from the inputs, no network. */
   demo: boolean
 }
+
+export interface OllamaAiConfig {
+  provider: 'ollama'
+  /** Normalized server address, e.g. "http://127.0.0.1:11434". */
+  baseUrl: string
+  /** The installed model to use; null until the learner picks one. */
+  model: string | null
+  /** num_ctx for every request, which also sizes how much of the files fits. */
+  contextTokens: OllamaContextSize
+  /** Offline demo mode: deterministic canned outputs built from the inputs, no network. */
+  demo: boolean
+}
+
+export type AiConfig = ClaudeAiConfig | OllamaAiConfig
 
 export interface AiSourceDoc {
   name: string
@@ -104,8 +127,18 @@ export interface GeneratedCard {
 
 // Rough sizes of a finished answer (characters of JSON), for progress estimates.
 const LESSON_CHARS = 28_000
+const COMPACT_LESSON_CHARS = 10_000
 const QUESTION_CHARS = 900
 const CARD_CHARS = 260
+/** A Claude-written lesson can be ~30,000 characters; a local model's flashcard call gets a shorter digest of it. */
+const COMPACT_DIGEST_CHARS = 6_000
+/** Top-up calls a local model gets beyond the ones its quiz's shortfall needs (Claude gets exactly one). */
+const LOCAL_EXTRA_TOP_UPS = 2
+
+/** One structured task, provider-neutral: the runner adds the model. */
+type TaskCall<T> = OllamaCall<T>
+/** Runs one structured task on the configured provider. */
+type Runner = <T>(call: TaskCall<T>, options?: CallOptions) => Promise<T>
 
 export class StudyAi {
   constructor(private readonly getConfig: () => AiConfig) {}
@@ -115,15 +148,15 @@ export class StudyAi {
     input: { notebookName: string; syllabus: AiSourceDoc; existingTopicTitles: string[]; todayDate: string },
     options?: CallOptions
   ): Promise<SyllabusExtraction> {
-    const validate = (json: unknown): SyllabusExtraction => parseSyllabusOutput(json, { existingTopicTitles: input.existingTopicTitles })
     const config = this.getConfig()
+    // A local model's harmless slips are repaired rather than rejected; Claude's answers are parsed as they always were.
+    const lenient = config.provider === 'ollama'
+    const validate = (json: unknown): SyllabusExtraction => parseSyllabusOutput(json, { existingTopicTitles: input.existingTopicTitles, lenient })
     if (config.demo) return this.demo('syllabus', options, () => validate(demoSyllabus(input)))
-    return this.call(config, (client) =>
-      runStructured(
-        client,
+    return this.run(config, (run) =>
+      run(
         {
           task: 'syllabus',
-          model: config.model,
           instruction: syllabusInstruction(input),
           sources: [input.syllabus],
           schema: SYLLABUS_JSON_SCHEMA,
@@ -150,20 +183,19 @@ export class StudyAi {
     options?: CallOptions
   ): Promise<LessonContent> {
     const sourceNames = orderSources(input.sources).map((s) => s.name)
-    const validate = (json: unknown): LessonContent => parseLessonOutput(json, { topic: input.topic, sourceNames })
     const config = this.getConfig()
+    const local = config.provider === 'ollama'
+    const validate = (json: unknown): LessonContent => parseLessonOutput(json, { topic: input.topic, sourceNames, lenient: local })
     if (config.demo) return this.demo('lesson', options, () => validate(demoLesson(input)))
-    return this.call(config, (client) =>
-      runStructured(
-        client,
+    return this.run(config, (run) =>
+      run(
         {
           task: 'lesson',
-          model: config.model,
-          instruction: lessonInstruction(input),
+          instruction: local ? compactLessonInstruction(input) : lessonInstruction(input),
           sources: input.sources,
           schema: LESSON_JSON_SCHEMA,
           validate,
-          progress: lessonProgress()
+          progress: lessonProgress(local ? COMPACT_LESSON_CHARS : LESSON_CHARS)
         },
         options
       )
@@ -175,13 +207,15 @@ export class StudyAi {
     if (input.count < 1 || input.types.length === 0 || input.topics.length === 0) {
       throw new AppError('INVALID_INPUT', 'A quiz needs at least one question, one question type and one topic.')
     }
+    const config = this.getConfig()
+    const local = config.provider === 'ollama'
     const context: QuestionsContext = {
       topics: input.topics,
       primaryTopicId: input.primaryTopicId,
       types: input.types,
-      difficulty: input.difficulty
+      difficulty: input.difficulty,
+      lenient: local
     }
-    const config = this.getConfig()
 
     if (config.demo) {
       return this.demo('quiz', options, () => {
@@ -190,44 +224,67 @@ export class StudyAi {
       })
     }
 
-    return this.call(config, async (client) => {
-      const batch = async (count: number, alreadyWritten: string[], batchOptions: CallOptions | undefined): Promise<Question[]> =>
-        runStructured(
-          client,
+    const style: PromptStyle | undefined = local ? { compact: true } : undefined
+    // A local model writes a big quiz in several smaller calls; Claude writes it in one.
+    const perCall = config.provider === 'ollama' ? ollamaQuestionsPerCall(config.contextTokens) : input.count
+    // A local model's grammar allows only the chosen question types.
+    const schema = local ? questionsJsonSchema(input.types) : QUESTIONS_JSON_SCHEMA
+    return this.run(config, async (run) => {
+      const batch = async (count: number, alreadyWritten: string[], batchOptions: CallOptions | undefined, progress: ProgressPlan): Promise<Question[]> =>
+        run(
           {
             task: 'quiz',
-            model: config.model,
-            instruction: questionsInstruction(input, { count, alreadyWritten }),
+            instruction: questionsInstruction(input, { count, alreadyWritten }, style),
             sources: input.sources,
-            schema: QUESTIONS_JSON_SCHEMA,
+            schema,
             validate: (json) => {
               const parsed = parseQuestionsOutput(json, context)
               if (parsed.questions.length === 0) throw new OutputError(`None of the questions were usable (${parsed.rejected.slice(0, 3).join('; ')}).`)
               return parsed.questions
             },
-            progress: quizProgress(count)
+            progress,
+            itemCount: count
           },
           batchOptions
         )
 
-      let questions = collectQuestions([], await batch(input.count, [], options), input)
-      // One top-up call when items were dropped or the model wrote too few.
-      if (questions.length < input.count) {
-        const missing = input.count - questions.length
+      let questions: Question[] = []
+      // A local model is shown only a few of the recent quizzes' prompts, so its repeats of the others are kept as a last resort.
+      const spares: Question[] | undefined = local ? [] : undefined
+      const calls = Math.ceil(input.count / perCall)
+      for (let i = 0; i < calls && questions.length < input.count; i++) {
+        const count = Math.min(perCall, input.count - questions.length)
+        // Each call fills its share of the first 90% of the job's progress bar.
+        const callOptions = calls === 1 ? options : progressSlice(options, (0.9 * i) / calls, (0.9 * (i + 1)) / calls)
+        const written = questions.length
+        const more = await batch(count, questions.map((q) => q.prompt), callOptions, quizProgress(count, written, input.count))
+        questions = collectQuestions(questions, more, input, spares)
+      }
+      // Top-up calls when items were dropped or the model wrote too few: one for
+      // Claude; a few for a local model, which drops a question or two in most
+      // calls, each asking for what is still missing until one adds nothing new.
+      const topUps = local ? Math.ceil((input.count - questions.length) / perCall) + LOCAL_EXTRA_TOP_UPS : 1
+      for (let t = 0; t < topUps && questions.length < input.count; t++) {
+        const missing = Math.min(perCall, input.count - questions.length)
         const onProgress = options?.onProgress
-        // The top-up continues the job's progress bar instead of starting it again from zero.
+        // Top-ups continue the job's progress bar (its last 9%) instead of starting it again from zero.
+        const from = 0.9 + (0.09 * t) / topUps
+        const span = 0.09 / topUps
         const topUpOptions: CallOptions = {
           signal: options?.signal,
-          onProgress: onProgress && ((task, p) => onProgress(task, p === null ? null : 0.9 + 0.09 * p, `Writing ${missing} more question${missing === 1 ? '' : 's'}`))
+          onProgress: onProgress && ((task, p) => onProgress(task, p === null ? null : from + span * p, `Writing ${missing} more question${missing === 1 ? '' : 's'}`))
         }
+        const before = questions.length
         const more = await batch(
           missing,
           questions.map((q) => q.prompt),
-          topUpOptions
+          topUpOptions,
+          quizProgress(missing)
         )
-        questions = collectQuestions(questions, more, input)
+        questions = collectQuestions(questions, more, input, spares)
+        if (questions.length === before) break
       }
-      return requireCount(questions, input.count)
+      return requireCount(spares ? fillFromSpares(questions, spares, input.count) : questions, input.count)
     })
   }
 
@@ -236,19 +293,21 @@ export class StudyAi {
     input: { notebookName: string; topic: TopicBrief; lesson: LessonContent; sources: AiSourceDoc[]; count: number },
     options?: CallOptions
   ): Promise<GeneratedCard[]> {
-    const validate = (json: unknown): GeneratedCard[] => parseFlashcardsOutput(json, { count: input.count })
     const config = this.getConfig()
+    const local = config.provider === 'ollama'
+    const validate = (json: unknown): GeneratedCard[] => parseFlashcardsOutput(json, { count: input.count, lenient: local })
     if (config.demo) return this.demo('flashcards', options, () => validate(demoFlashcards(input)))
-    return this.call(config, (client) =>
-      runStructured(
-        client,
+    const digest = local ? (lesson: LessonContent) => compactLessonDigest(lesson, COMPACT_DIGEST_CHARS) : lessonDigest
+    const style: PromptStyle | undefined = local ? { compact: true } : undefined
+    return this.run(config, (run) =>
+      run(
         {
           task: 'flashcards',
-          model: config.model,
-          instruction: flashcardsInstruction({ ...input, lessonSummary: lessonDigest(input.lesson) }),
+          instruction: flashcardsInstruction({ ...input, lessonSummary: digest(input.lesson) }, style),
           sources: input.sources,
           schema: FLASHCARDS_JSON_SCHEMA,
           validate,
+          itemCount: input.count,
           progress: {
             expectedChars: CARD_CHARS * input.count,
             startMessage: 'Reviewing the lesson',
@@ -268,16 +327,15 @@ export class StudyAi {
   ): Promise<ExplanationFeedback> {
     const config = this.getConfig()
     if (config.demo) return this.demo('explanation', options, () => parseExplanationOutput(demoExplanation(input)))
-    return this.call(config, (client) =>
-      runStructured(
-        client,
+    const lenient = config.provider === 'ollama'
+    return this.run(config, (run) =>
+      run(
         {
           task: 'explanation',
-          model: config.model,
           instruction: explanationInstruction(input),
           sources: input.sources,
           schema: EXPLANATION_JSON_SCHEMA,
-          validate: parseExplanationOutput,
+          validate: (json) => parseExplanationOutput(json, { lenient }),
           progress: {
             expectedChars: 1_500,
             startMessage: 'Reading your explanation',
@@ -294,13 +352,12 @@ export class StudyAi {
   async summarizeSource(input: { notebookName: string; source: AiSourceDoc }, options?: CallOptions): Promise<{ title: string; summary: string }> {
     const config = this.getConfig()
     if (config.demo) return this.demo('summary', options, () => parseSummaryOutput(demoSummary(input)))
-    return this.call(config, (client) =>
-      runStructured(
-        client,
+    const style: PromptStyle | undefined = config.provider === 'ollama' ? { compact: true } : undefined
+    return this.run(config, (run) =>
+      run(
         {
           task: 'summary',
-          model: config.model,
-          instruction: summaryInstruction(input),
+          instruction: summaryInstruction(input, style),
           sources: [input.source],
           schema: SUMMARY_JSON_SCHEMA,
           validate: parseSummaryOutput,
@@ -317,11 +374,12 @@ export class StudyAi {
     )
   }
 
-  /** Tiny request to verify the key and model work. Never throws. */
+  /** Checks the configured provider works (Claude: a tiny request with the key; Ollama: server, model, context size). Never throws. */
   async testConnection(): Promise<{ ok: boolean; message: string }> {
     try {
       const config = this.getConfig()
       if (config.demo) return { ok: true, message: 'Demo mode is on: AI features use offline sample content, so no key is needed.' }
+      if (config.provider === 'ollama') return await testOllamaConnection(config)
       if (!config.apiKey) return { ok: false, message: ERROR_MESSAGES.NO_API_KEY }
       const model = await this.clientFor(config.apiKey).models.retrieve(config.model)
       return { ok: true, message: `Connected. ${model.display_name} is ready to use.` }
@@ -336,7 +394,28 @@ export class StudyAi {
     return clientForKey(apiKey)
   }
 
-  private async call<T>(config: AiConfig, run: (client: AiClient) => Promise<T>): Promise<T> {
+  /**
+   * Runs `body` with a runner for the configured provider. Claude: the key is
+   * checked first and one client serves every call of the task. Ollama: a
+   * model must be chosen; every error is already an AppError.
+   */
+  private async run<T>(config: AiConfig, body: (run: Runner) => Promise<T>): Promise<T> {
+    if (config.provider === 'ollama') {
+      if (!config.model) throw new AppError('NO_AI_MODEL', ERROR_MESSAGES.NO_AI_MODEL)
+      const target: OllamaTarget = { baseUrl: config.baseUrl, model: config.model, contextTokens: config.contextTokens }
+      return body((call, options) => runOllamaStructured(target, call, options))
+    }
+    return this.call(config, (client) =>
+      body((call, options) => {
+        // itemCount only sizes a local model's answer.
+        const { itemCount, ...rest } = call
+        void itemCount
+        return runStructured(client, { ...rest, model: config.model }, options)
+      })
+    )
+  }
+
+  private async call<T>(config: ClaudeAiConfig, run: (client: AiClient) => Promise<T>): Promise<T> {
     if (!config.apiKey) throw new AppError('NO_API_KEY', ERROR_MESSAGES.NO_API_KEY)
     try {
       return await run(this.clientFor(config.apiKey))
@@ -358,9 +437,9 @@ export class StudyAi {
   }
 }
 
-function lessonProgress(): ProgressPlan {
+function lessonProgress(expectedChars: number): ProgressPlan {
   return {
-    expectedChars: LESSON_CHARS,
+    expectedChars,
     startMessage: 'Reading your files',
     thinkingMessage: 'Planning your lesson',
     describe: (text) => {
@@ -372,20 +451,52 @@ function lessonProgress(): ProgressPlan {
   }
 }
 
-function quizProgress(count: number): ProgressPlan {
+/** Progress for one call writing `count` questions, after `written` of a quiz of `total`. */
+function quizProgress(count: number, written = 0, total = count): ProgressPlan {
   return {
     expectedChars: QUESTION_CHARS * count,
     startMessage: 'Reading your files',
     thinkingMessage: 'Planning your questions',
-    describe: (text) => `Writing question ${Math.max(1, Math.min(countKey(text, 'prompt'), count))} of ${count}`
+    describe: (text) => `Writing question ${written + Math.max(1, Math.min(countKey(text, 'prompt'), count))} of ${total}`
   }
 }
 
-/** Adds new questions, skipping repeats of earlier ones and of recently asked prompts. */
-function collectQuestions(existing: Question[], incoming: Question[], input: GenerateQuestionsInput): Question[] {
+/** Maps one call's 0-1 progress onto [from, to] of the job's progress bar. */
+function progressSlice(options: CallOptions | undefined, from: number, to: number): CallOptions {
+  const onProgress = options?.onProgress
+  return {
+    signal: options?.signal,
+    onProgress: onProgress && ((task, p, message) => onProgress(task, p === null ? null : from + (to - from) * p, message))
+  }
+}
+
+/** Adds new questions, skipping repeats of earlier ones and of recently asked prompts (kept in `spares` when given). */
+function collectQuestions(existing: Question[], incoming: Question[], input: GenerateQuestionsInput, spares?: Question[]): Question[] {
   const seen = new Set([...input.avoidPrompts, ...existing.map((q) => q.prompt)].map(promptKey))
   const result = [...existing]
   for (const question of incoming) {
+    const key = promptKey(question.prompt)
+    if (seen.has(key)) {
+      spares?.push(question)
+      continue
+    }
+    seen.add(key)
+    result.push(question)
+  }
+  return result
+}
+
+/**
+ * Completes a local model's quiz that is still short with questions it
+ * dropped for repeating an earlier quiz's prompt: the learner has seen them
+ * before, but that beats losing every question already written. Repeats
+ * within this quiz are never used.
+ */
+function fillFromSpares(questions: Question[], spares: Question[], count: number): Question[] {
+  const seen = new Set(questions.map((q) => promptKey(q.prompt)))
+  const result = [...questions]
+  for (const question of spares) {
+    if (result.length >= count) break
     const key = promptKey(question.prompt)
     if (seen.has(key)) continue
     seen.add(key)

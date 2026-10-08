@@ -83,7 +83,8 @@ export const queryKeys = {
   exams: (notebookId?: ID) => ['listExams', notebookId ?? null] as const,
   today: () => ['getToday'] as const,
   insights: () => ['getInsights'] as const,
-  settings: () => ['getSettings'] as const
+  settings: () => ['getSettings'] as const,
+  ollamaModels: (url: string) => ['listOllamaModels', url] as const
 }
 
 // ---------------------------------------------------------------------------
@@ -208,6 +209,18 @@ export function useInsights(options?: QueryOptions<Insights>) {
 
 export function useSettings(options?: QueryOptions<Settings>) {
   return useApiQuery(queryKeys.settings(), () => api.getSettings(), options)
+}
+
+export type OllamaModelList = Awaited<ReturnType<StudyApi['listOllamaModels']>>
+
+/**
+ * The models installed in Ollama at `url` (the saved address). An
+ * unreachable server is not an error: `ok` is false and `message` says what
+ * to do. Refetched when the window regains focus, so a model pulled in a
+ * terminal shows up when the learner comes back.
+ */
+export function useOllamaModels(url: string | undefined, options?: QueryOptions<OllamaModelList>) {
+  return useApiQuery(queryKeys.ollamaModels(url ?? ''), () => api.listOllamaModels(url!), options, !!url)
 }
 
 // ---------------------------------------------------------------------------

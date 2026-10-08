@@ -22,7 +22,8 @@ export interface ErrorNoticeProps {
 
 /**
  * Friendly error with an optional retry and technical details on demand.
- * For a missing or rejected API key it links to Settings; for missing files
+ * For a missing or rejected API key, an Ollama that can't be reached or no
+ * Ollama model it links to Settings; for missing files
  * (NO_SOURCES) to the notebook when `addFilesTo` is given.
  *   <ErrorNotice error={lesson.error} onRetry={() => lesson.run(topicId)} addFilesTo={ROUTES.notebook(id)} />
  */
@@ -47,7 +48,7 @@ export function ErrorNotice({
   if (error === null || error === undefined) return null
   const apiError = toApiError(error)
   const needsFiles = apiError.code === 'NO_SOURCES' && addFilesTo !== undefined
-  // The fix comes first: a retry only helps once the key or the files are there.
+  // The fix comes first: a retry only helps once the key, Ollama or the files are there.
   const fixFirst = apiError.needsSettings || needsFiles
 
   return (

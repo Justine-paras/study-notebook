@@ -150,11 +150,26 @@ function envApiKey(): string | null {
   return key ? key : null
 }
 
-/** Current AI configuration: stored (decrypted) API key or ANTHROPIC_API_KEY, chosen model, demo flag. */
+/**
+ * Current AI configuration for the chosen provider. Claude: stored
+ * (decrypted) API key or ANTHROPIC_API_KEY, and the Claude model. Ollama:
+ * server address, model and context size. Both carry the demo flag.
+ */
 export function getAiConfig(ctx: AppContext): AiConfig {
+  const settings = readStoredSettings(ctx)
+  if (settings.aiProvider === 'ollama') {
+    return {
+      provider: 'ollama',
+      baseUrl: settings.ollamaUrl,
+      model: settings.ollamaModel,
+      contextTokens: settings.ollamaContextTokens,
+      demo: ctx.demoAi
+    }
+  }
   return {
+    provider: 'claude',
     apiKey: storedApiKey(ctx) ?? envApiKey(),
-    model: readStoredSettings(ctx).model,
+    model: settings.model,
     demo: ctx.demoAi
   }
 }

@@ -21,7 +21,7 @@ import {
 import { listTopicRows, updateTopicRow } from '../db/repositories/topics'
 import { transaction } from '../db/sql'
 import { invalid, newId, notFound, nowIso, removeStoredFiles, requireNotebook, runAiJob } from './common'
-import { selectSources } from './sourceBudget'
+import { selectWholeFile } from './topicSources'
 
 function requireSource(ctx: AppContext, id: ID): Source {
   const source = typeof id === 'string' ? findSource(ctx.db, id) : null
@@ -163,7 +163,7 @@ export async function summarizeSource(ctx: AppContext, id: ID): Promise<Note> {
     throw new AppError('EXTRACT_FAILED', `${source.fileName} has no readable text to summarize.`)
   }
   // A summary covers the whole file, so with no topic to rank by, the cut keeps the opening pages.
-  const selection = selectSources([{ id, fileName: source.fileName, kind: source.kind, text }], { titles: [], descriptions: [] })
+  const selection = selectWholeFile(ctx, { id, fileName: source.fileName, kind: source.kind, text })
   const doc = selection.docs[0]
   const result = await runAiJob(ctx, { task: 'summary', subjectId: source.id }, `Summarizing ${source.fileName}`, (options) =>
     ctx.ai.summarizeSource({ notebookName: notebook.name, source: doc }, options)

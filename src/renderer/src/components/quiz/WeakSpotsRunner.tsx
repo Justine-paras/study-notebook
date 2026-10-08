@@ -8,6 +8,7 @@ import { pluralize } from '../../lib/format'
 import { usePomodoroNotebook } from '../../lib/pomodoro'
 import { queryKeys, useNotebook, useQuiz, useQuizResult } from '../../lib/queries'
 import { ROUTES } from '../../lib/routes'
+import { useLocalAi } from '../../lib/useLocalAi'
 import { AiWorking } from '../AiWorking'
 import { ErrorNotice } from '../ErrorNotice'
 import { MasteryPill } from '../MasteryPill'
@@ -127,6 +128,7 @@ function parseQuizId(value: unknown): ID | null {
 function WeakGroup({ planDate, group, topics, count, autoStart, position, nextLabel, onProgress, onDone }: WeakGroupProps) {
   usePomodoroNotebook(group.notebookId)
   const notebook = useNotebook(group.notebookId)
+  const local = useLocalAi()
   const storageKey = weakQuizStorageKey(planDate, group.notebookId)
   const [quizId, setQuizId] = useState<ID | null>(() => readStored(storageKey, parseQuizId, null))
   const [result, setResult] = useState<QuizResult | null>(null)
@@ -217,7 +219,7 @@ function WeakGroup({ planDate, group, topics, count, autoStart, position, nextLa
           <Button size="lg" icon={<Sparkles size={18} aria-hidden="true" />} onClick={start}>
             Write my questions
           </Button>
-          <span className="text-sm muted">Takes a minute or two.</span>
+          <span className="text-sm muted">{local ? 'Takes several minutes with Ollama.' : 'Takes a minute or two.'}</span>
         </div>
       </Sheet>
     )

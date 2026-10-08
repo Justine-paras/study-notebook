@@ -4,6 +4,7 @@ import type { ID, QuizResult, TopicWithProgress } from '@shared/types'
 import { useAiAction } from '../../lib/aiJobs'
 import { useQuiz, useQuizResult, useQuizzes } from '../../lib/queries'
 import { ROUTES } from '../../lib/routes'
+import { useLocalAi } from '../../lib/useLocalAi'
 import { AiWorking } from '../AiWorking'
 import { ErrorNotice } from '../ErrorNotice'
 import { QuizResults } from '../quiz/QuizResults'
@@ -26,6 +27,7 @@ export interface PracticeStepProps {
  */
 export function PracticeStep({ topic, onContinue }: PracticeStepProps) {
   const quizzes = useQuizzes(topic.notebookId, 'practice')
+  const local = useLocalAi()
   const [chosenQuizId, setChosenQuizId] = useState<ID | null>(null)
   const [wantsNew, setWantsNew] = useState(false)
   const [result, setResult] = useState<QuizResult | null>(null)
@@ -77,7 +79,7 @@ export function PracticeStep({ topic, onContinue }: PracticeStepProps) {
             initial={latest?.settings ?? DEFAULT_PRACTICE_SETTINGS}
             onSubmit={generate}
             pending={create.isPending}
-            note="Takes a minute or two to write."
+            note={local ? 'Takes several minutes to write with Ollama.' : 'Takes a minute or two to write.'}
           />
           <ErrorNotice
             error={create.error}

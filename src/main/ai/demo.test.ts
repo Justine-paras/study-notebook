@@ -56,7 +56,7 @@ const topics: TopicBrief[] = [
   { id: 'topic-dead', title: 'Deadlocks', description: 'The four Coffman conditions, prevention, avoidance, detection.', unitLabel: 'Week 3' }
 ]
 
-const demoAi = new StudyAi(() => ({ apiKey: null, model: 'claude-opus-5-5', demo: true }))
+const demoAi = new StudyAi(() => ({ provider: 'claude', apiKey: null, model: 'claude-opus-5-5', demo: true }))
 
 function quizInput(overrides: Partial<GenerateQuestionsInput> = {}): GenerateQuestionsInput {
   return {

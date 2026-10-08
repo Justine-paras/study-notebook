@@ -14,6 +14,9 @@ export const NON_RETRYABLE_CODES: ReadonlySet<string> = new Set<AppErrorCode | t
   NO_BRIDGE_CODE,
   'NO_API_KEY',
   'INVALID_API_KEY',
+  // Ollama stays closed, or the model stays missing, until the learner opens or pulls it.
+  'OLLAMA_UNREACHABLE',
+  'NO_AI_MODEL',
   'AI_REFUSED',
   'SOURCE_TOO_LARGE',
   'NO_SOURCES',
@@ -27,14 +30,32 @@ export const NON_RETRYABLE_CODES: ReadonlySet<string> = new Set<AppErrorCode | t
  * Codes whose message from the main process is written for the learner and
  * says more than the generic text: which safety area a refusal touched, that
  * the files fill the model's context window, which input was not valid
- * ("Add topics to this notebook before making a quiz."). For these the
- * message becomes the friendly text; other codes keep the generic text and
- * show the message only under Details.
+ * ("Add topics to this notebook before making a quiz."), which Ollama
+ * address couldn't be reached, and which model to pull or why it can't run
+ * ("qwen3:8b isn't installed in Ollama. Open a terminal and run ..."). For
+ * these the message becomes the friendly text; other codes keep the generic
+ * text and show the message only under Details.
  */
-export const SPECIFIC_MESSAGE_CODES: ReadonlySet<string> = new Set<AppErrorCode>(['AI_REFUSED', 'SOURCE_TOO_LARGE', 'INVALID_INPUT'])
+export const SPECIFIC_MESSAGE_CODES: ReadonlySet<string> = new Set<AppErrorCode>([
+  'AI_REFUSED',
+  'SOURCE_TOO_LARGE',
+  'INVALID_INPUT',
+  'OLLAMA_UNREACHABLE',
+  'NO_AI_MODEL'
+])
 
-/** Codes that are fixed in Settings (ErrorNotice shows a Settings button). */
-export const SETTINGS_ERROR_CODES: ReadonlySet<string> = new Set<AppErrorCode>(['NO_API_KEY', 'INVALID_API_KEY'])
+/**
+ * Codes that are fixed in Settings (ErrorNotice shows a Settings button): a
+ * missing or rejected API key for Claude; for Ollama a server that can't be
+ * reached (Settings explains how to install and open it), or a model that is
+ * not chosen, not installed or too big for this computer.
+ */
+export const SETTINGS_ERROR_CODES: ReadonlySet<string> = new Set<AppErrorCode>([
+  'NO_API_KEY',
+  'INVALID_API_KEY',
+  'OLLAMA_UNREACHABLE',
+  'NO_AI_MODEL'
+])
 
 export class ApiError extends Error {
   /** An AppErrorCode from the main process, or another string for renderer-side failures. */
@@ -57,7 +78,7 @@ export class ApiError extends Error {
     return !NON_RETRYABLE_CODES.has(this.code)
   }
 
-  /** True when the fix is in Settings (missing or rejected API key). */
+  /** True when the fix is in Settings (API key, Ollama address or model). */
   get needsSettings(): boolean {
     return SETTINGS_ERROR_CODES.has(this.code)
   }

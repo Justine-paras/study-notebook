@@ -1,12 +1,13 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Download, FolderOpen, Info } from 'lucide-react'
-import { AI_MODELS, type AiModelId, type Settings, type ThemePref } from '@shared/types'
+import { AI_MODELS, type AiModelId, type AiProvider, type Settings, type ThemePref } from '@shared/types'
 import { ErrorNotice } from '../components/ErrorNotice'
 import { Button, Callout, LoadingBlock, Page, PageHeader, Panel, Segmented, Select, useToast } from '../components/ui'
 import { ApiKeySection } from '../components/settings/ApiKeySection'
 import { NumberSetting } from '../components/settings/NumberSetting'
+import { OllamaSection } from '../components/settings/OllamaSection'
 import { RetentionSetting } from '../components/settings/RetentionSetting'
-import { NUMBER_SETTINGS } from '../components/settings/settingsModel'
+import { NUMBER_SETTINGS, PROVIDER_OPTIONS } from '../components/settings/settingsModel'
 import { useSaveSetting } from '../components/settings/useSaveSetting'
 import { useApiMutation, useSettings } from '../lib/queries'
 import { useTheme } from '../lib/theme'
@@ -65,8 +66,10 @@ function SettingsForm({ settings }: { settings: Settings }) {
   const toast = useToast()
   const save = useSaveSetting()
   const { preference, setPreference } = useTheme()
+  const [provider, setProvider] = useState<AiProvider>(settings.aiProvider)
   const [model, setModel] = useState<AiModelId>(settings.model)
 
+  useEffect(() => setProvider(settings.aiProvider), [settings.aiProvider])
   useEffect(() => setModel(settings.model), [settings.model])
 
   const openFolder = useApiMutation('openDataFolder', {
@@ -81,6 +84,13 @@ function SettingsForm({ settings }: { settings: Settings }) {
     },
     onError: (err) => toast.error(err, "Couldn't save the backup")
   })
+
+  async function changeProvider(next: AiProvider) {
+    if (next === provider) return
+    const previous = provider
+    setProvider(next)
+    if (!(await save({ aiProvider: next }, 'AI provider'))) setProvider(previous)
+  }
 
   async function changeModel(next: AiModelId) {
     const previous = model
@@ -106,17 +116,32 @@ function SettingsForm({ settings }: { settings: Settings }) {
         {settings.demoAi && (
           <Callout tone="info" icon={<Info size={18} aria-hidden="true" />} title="Demo mode is on">
             The app is running with offline demo content, so no key is needed and nothing is sent anywhere. Lessons and
-            quizzes are simple stand-ins built from your files. Restart without demo mode to use Claude.
+            quizzes are simple stand-ins built from your files. Restart without demo mode to use Claude or Ollama.
           </Callout>
         )}
-        <ApiKeySection settings={settings} />
-        <Select
-          label="Model"
-          hint="Opus writes the most thorough lessons. Sonnet and Haiku are quicker and cost less per use."
-          value={model}
-          options={MODEL_OPTIONS}
-          onChange={(event) => void changeModel(event.target.value as AiModelId)}
-        />
+        <div className="settings__control">
+          <span className="settings__label" aria-hidden="true">
+            AI provider
+          </span>
+          <Segmented label="AI provider" value={provider} onChange={(next) => void changeProvider(next)} options={PROVIDER_OPTIONS} />
+          <span className="settings__hint">
+            Claude works online through your Anthropic account. Ollama runs a free model on this computer.
+          </span>
+        </div>
+        {provider === 'claude' ? (
+          <>
+            <ApiKeySection settings={settings} />
+            <Select
+              label="Model"
+              hint="Opus writes the most thorough lessons. Sonnet and Haiku are quicker and cost less per use."
+              value={model}
+              options={MODEL_OPTIONS}
+              onChange={(event) => void changeModel(event.target.value as AiModelId)}
+            />
+          </>
+        ) : (
+          <OllamaSection settings={settings} />
+        )}
       </Section>
 
       <Section title="Appearance">
