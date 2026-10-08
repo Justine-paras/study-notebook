@@ -8,6 +8,7 @@ describe('query client defaults', () => {
     expect(shouldRetryQuery(0, new ApiError('NETWORK', 'offline'))).toBe(true)
     expect(shouldRetryQuery(1, new ApiError('NETWORK', 'offline'))).toBe(false)
     expect(shouldRetryQuery(0, new ApiError('NOT_FOUND', 'gone'))).toBe(false)
+    expect(shouldRetryQuery(0, new ApiError('OLLAMA_UNREACHABLE', 'closed'))).toBe(false)
     expect(shouldRetryQuery(0, new Error('anything'))).toBe(true)
   })
 
@@ -28,6 +29,7 @@ describe('query keys', () => {
     expect(queryKeys.quizzes('nb1', 'mock_exam')).toEqual(['listQuizzes', 'nb1', 'mock_exam'])
     expect(queryKeys.reviewQueue()).toEqual(['getReviewQueue', {}])
     expect(queryKeys.exams()).toEqual(['listExams', null])
+    expect(queryKeys.ollamaModels('http://127.0.0.1:11434')).toEqual(['listOllamaModels', 'http://127.0.0.1:11434'])
   })
 })
 

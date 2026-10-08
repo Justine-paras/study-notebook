@@ -4,8 +4,20 @@ import { rename, rm } from 'node:fs/promises'
 import { basename, dirname, join, resolve } from 'node:path'
 import { AppError } from '@shared/errors'
 import { localDate } from '@shared/learning'
-import { AI_MODELS, type AiModelId, type Settings, type SettingsUpdate, type ThemePref } from '@shared/types'
+import {
+  AI_MODELS,
+  AI_PROVIDERS,
+  DEFAULT_OLLAMA_URL,
+  OLLAMA_CONTEXT_SIZES,
+  type AiModelId,
+  type AiProvider,
+  type OllamaContextSize,
+  type Settings,
+  type SettingsUpdate,
+  type ThemePref
+} from '@shared/types'
 import type { AiConfig } from '../ai'
+import { fetchOllamaModels, normalizeOllamaUrl, type OllamaModelsResult } from '../ai/ollama'
 import type { AppContext } from '../context'
 import { deleteSetting, readSetting, readSettingRows, writeSetting } from '../db/repositories/settings'
 import { transaction } from '../db/sql'
@@ -15,7 +27,11 @@ import { invalid, newId } from './common'
 export type StoredSettings = Required<SettingsUpdate>
 
 export const DEFAULT_SETTINGS: StoredSettings = {
+  aiProvider: 'claude',
   model: 'claude-opus-5-5',
+  ollamaUrl: DEFAULT_OLLAMA_URL,
+  ollamaModel: null,
+  ollamaContextTokens: 16384,
   theme: 'system',
   focusMinutes: 25,
   breakMinutes: 5,
@@ -28,6 +44,10 @@ const API_KEY_SETTING = 'apiKey'
 const API_KEY_MAX = 500
 const THEMES: readonly ThemePref[] = ['system', 'light', 'dark']
 const MODEL_IDS = AI_MODELS.map((m) => m.id) as readonly string[]
+const PROVIDER_IDS = AI_PROVIDERS.map((p) => p.id) as readonly string[]
+// Ollama names look like "qwen3:8b", "llama3.2:latest" or "hf.co/user/repo:Q4_K_M".
+const OLLAMA_MODEL_NAME = /^[\w.\-:/@]+$/
+const OLLAMA_MODEL_MAX = 200
 
 type Validator<K extends keyof StoredSettings> = (value: unknown) => StoredSettings[K]
 
@@ -41,9 +61,27 @@ function integerIn(field: string, min: number, max: number): (value: unknown) =>
 }
 
 const VALIDATORS: { [K in keyof StoredSettings]: Validator<K> } = {
+  aiProvider: (value) => {
+    if (typeof value !== 'string' || !PROVIDER_IDS.includes(value)) throw invalid('Choose Claude or Ollama as the AI provider.')
+    return value as AiProvider
+  },
   model: (value) => {
     if (typeof value !== 'string' || !MODEL_IDS.includes(value)) throw invalid('Choose one of the listed AI models.')
     return value as AiModelId
+  },
+  ollamaUrl: (value) => normalizeOllamaUrl(value),
+  ollamaModel: (value) => {
+    if (value === null) return null
+    if (typeof value !== 'string') throw invalid('Choose one of the models installed in Ollama.')
+    const name = value.trim()
+    if (!name || name.length > OLLAMA_MODEL_MAX || !OLLAMA_MODEL_NAME.test(name)) throw invalid('Choose one of the models installed in Ollama.')
+    return name
+  },
+  ollamaContextTokens: (value) => {
+    if (typeof value !== 'number' || !(OLLAMA_CONTEXT_SIZES as readonly number[]).includes(value)) {
+      throw invalid('Choose one of the listed context sizes.')
+    }
+    return value as OllamaContextSize
   },
   theme: (value) => {
     if (typeof value !== 'string' || !(THEMES as readonly string[]).includes(value)) throw invalid('Theme must be system, light or dark.')
@@ -112,11 +150,26 @@ function envApiKey(): string | null {
   return key ? key : null
 }
 
-/** Current AI configuration: stored (decrypted) API key or ANTHROPIC_API_KEY, chosen model, demo flag. */
+/**
+ * Current AI configuration for the chosen provider. Claude: stored
+ * (decrypted) API key or ANTHROPIC_API_KEY, and the Claude model. Ollama:
+ * server address, model and context size. Both carry the demo flag.
+ */
 export function getAiConfig(ctx: AppContext): AiConfig {
+  const settings = readStoredSettings(ctx)
+  if (settings.aiProvider === 'ollama') {
+    return {
+      provider: 'ollama',
+      baseUrl: settings.ollamaUrl,
+      model: settings.ollamaModel,
+      contextTokens: settings.ollamaContextTokens,
+      demo: ctx.demoAi
+    }
+  }
   return {
+    provider: 'claude',
     apiKey: storedApiKey(ctx) ?? envApiKey(),
-    model: readStoredSettings(ctx).model,
+    model: settings.model,
     demo: ctx.demoAi
   }
 }
@@ -167,6 +220,12 @@ export async function clearApiKey(ctx: AppContext): Promise<Settings> {
 
 export async function testApiKey(ctx: AppContext): Promise<{ ok: boolean; message: string }> {
   return ctx.ai.testConnection()
+}
+
+/** Models installed in Ollama at the saved address, or at `url` to try an address before saving it. */
+export async function listOllamaModels(ctx: AppContext, url?: string): Promise<OllamaModelsResult> {
+  const baseUrl = url === undefined ? readStoredSettings(ctx).ollamaUrl : normalizeOllamaUrl(url)
+  return fetchOllamaModels(baseUrl)
 }
 
 /** SQL string literal for a file path (VACUUM INTO does not accept bound parameters on every SQLite build). */

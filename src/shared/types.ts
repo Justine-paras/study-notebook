@@ -486,10 +486,47 @@ export const AI_MODELS = [
 ] as const
 export type AiModelId = (typeof AI_MODELS)[number]['id']
 
+/** Who writes lessons, questions and feedback: Claude through the Anthropic API, or a local model through Ollama. */
+export const AI_PROVIDERS = [
+  { id: 'claude', label: 'Claude (Anthropic API)' },
+  { id: 'ollama', label: 'Ollama (on this computer)' }
+] as const
+export type AiProvider = (typeof AI_PROVIDERS)[number]['id']
+
+/** Where Ollama listens by default on Windows, macOS and Linux. */
+export const DEFAULT_OLLAMA_URL = 'http://127.0.0.1:11434'
+
+/**
+ * Context window sizes (tokens) the learner can ask Ollama for. A bigger
+ * window lets the model read more of the files but needs more memory.
+ */
+export const OLLAMA_CONTEXT_SIZES = [8192, 16384, 32768, 65536, 131072] as const
+export type OllamaContextSize = (typeof OLLAMA_CONTEXT_SIZES)[number]
+
+/** A model installed in the learner's Ollama (from its /api/tags list). */
+export interface OllamaModelInfo {
+  /** The name to pass to Ollama, e.g. "qwen3:8b". */
+  name: string
+  sizeBytes: number
+  /** e.g. "8.2B"; null when Ollama doesn't say. */
+  parameterSize: string | null
+  /** e.g. "Q4_K_M"; null when Ollama doesn't say. */
+  quantization: string | null
+}
+
 export type ThemePref = 'system' | 'light' | 'dark'
 
 export interface Settings {
+  /** Which AI writes lessons, questions and feedback. */
+  aiProvider: AiProvider
+  /** The Claude model, used when aiProvider is 'claude'. */
   model: AiModelId
+  /** Base URL of the Ollama server, used when aiProvider is 'ollama'. */
+  ollamaUrl: string
+  /** The installed Ollama model to use, e.g. "qwen3:8b". Null until one is chosen. */
+  ollamaModel: string | null
+  /** Context window (tokens) requested from Ollama. */
+  ollamaContextTokens: OllamaContextSize
   theme: ThemePref
   focusMinutes: number
   breakMinutes: number
@@ -508,7 +545,20 @@ export interface Settings {
 }
 
 export type SettingsUpdate = Partial<
-  Pick<Settings, 'model' | 'theme' | 'focusMinutes' | 'breakMinutes' | 'newTopicsPerDay' | 'maxReviewsPerDay' | 'desiredRetention'>
+  Pick<
+    Settings,
+    | 'aiProvider'
+    | 'model'
+    | 'ollamaUrl'
+    | 'ollamaModel'
+    | 'ollamaContextTokens'
+    | 'theme'
+    | 'focusMinutes'
+    | 'breakMinutes'
+    | 'newTopicsPerDay'
+    | 'maxReviewsPerDay'
+    | 'desiredRetention'
+  >
 >
 
 // ---------------------------------------------------------------------------
@@ -537,6 +587,10 @@ export interface AiProgressEvent {
 export type AppErrorCode =
   | 'NO_API_KEY'
   | 'INVALID_API_KEY'
+  /** Ollama is selected but its server can't be reached (not installed, not running, wrong address) or stopped responding. */
+  | 'OLLAMA_UNREACHABLE'
+  /** Ollama is selected but no model is chosen, or the chosen model isn't installed or can't run (not a chat model, out of memory). */
+  | 'NO_AI_MODEL'
   | 'RATE_LIMITED'
   | 'AI_REFUSED'
   | 'AI_BAD_OUTPUT'

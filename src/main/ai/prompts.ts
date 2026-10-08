@@ -1,10 +1,21 @@
 // Every prompt the app sends. The system prompt is identical for every task
 // (and cached); everything task-specific goes in the final user text block,
 // after the cached course files.
+//
+// Local models (Ollama) get compact variants of the longest instructions:
+// small models write worse long JSON, and their answer has to fit a context
+// window of a few thousand tokens. The Claude prompts are the defaults and
+// never change when a compact variant is added.
 
 import { QUESTION_TYPE_LABELS } from '@shared/types'
 import type { QuestionType, QuizKind } from '@shared/types'
 import type { AiSourceDoc, GenerateQuestionsInput, TopicBrief } from './index'
+import type { JsonSchema } from './schemas'
+
+/** Wording for a model with a small context window: shorter fields and shorter lists in the instruction. */
+export interface PromptStyle {
+  compact?: boolean
+}
 
 export const SYSTEM_PROMPT = `You are the tutor inside Study Notebook, a desktop study app used by a university computer science student. You turn the student's own course files (lecture notes, slides, syllabi, past quizzes and exams) into lessons, practice questions, flashcards and feedback that help them understand the material and remember it for their exams.
 
@@ -51,9 +62,9 @@ const MODE_LABELS: Record<QuizKind, string> = {
   mock_exam: 'mock exam'
 }
 
-function topicLine(topic: TopicBrief): string {
+function topicLine(topic: TopicBrief, descriptionMax = 400): string {
   const unit = topic.unitLabel ? ` (${topic.unitLabel})` : ''
-  const description = topic.description ? `: ${oneLine(topic.description)}` : ''
+  const description = topic.description ? `: ${oneLine(topic.description, descriptionMax)}` : ''
   return `${topic.title}${unit}${description}`
 }
 
@@ -131,15 +142,70 @@ Fields:
 ${questionFormatRules(['mc', 'tf'])}`
 }
 
+/** Other topics a compact lesson may link to: titles only, so a long notebook doesn't crowd out the files. */
+const COMPACT_OTHER_TOPICS = 30
+
+/**
+ * The lesson for a local model: the same fields with exactly 3 short parts,
+ * 3-5 key terms and a 3-4 point rubric, so the answer stays within a few
+ * thousand tokens and still meets the minimums the lesson validator checks
+ * (2 warm-up questions, 3+ parts, 3+ key terms, 3+ rubric points).
+ */
+export function compactLessonInstruction(input: { notebookName: string; topic: TopicBrief; sources: AiSourceDoc[]; otherTopics: TopicBrief[] }): string {
+  const { topic } = input
+  const others = input.otherTopics.length
+    ? input.otherTopics
+        .slice(0, COMPACT_OTHER_TOPICS)
+        .map((t, i) => `${i + 1}. ${oneLine(t.title, 100)}`)
+        .join('\n')
+    : '(none yet)'
+  return `Task: write a short lesson on one topic of the course "${input.notebookName}".
+
+Topic: ${topic.title}${topic.unitLabel ? `\nUnit: ${topic.unitLabel}` : ''}${topic.description ? `\nDescription: ${oneLine(topic.description, 600)}` : ''}
+
+Other topics in this notebook:
+${others}
+
+${sourcesNote(input.sources)} Teach what the files say about this topic, in the course's own terms, using only the parts of the files that belong to this topic. Keep every field short: the whole lesson must stay compact.${lessonSourceRule(input.sources)}
+
+Fields:
+- "title": the topic name as the student would recognise it.
+- "overview": 2-3 sentences on what this topic is and why it matters.
+- "warmup": exactly 2 questions (type "mc" or "tf") asked BEFORE the student studies, as a pre-test. A thoughtful student can reason toward each answer from intuition, and each touches a core idea of the lesson. Each explanation is 1-2 sentences.
+- "chunks": exactly 3 parts in teaching order, each on one idea:
+  - "heading": short and specific (not "Introduction").
+  - "body": about 100-180 words: intuition first, then the precise definition or mechanism and why it works, then the misconception students most often have. Add code or math only where it helps.
+  - "example": a short worked example with concrete values, or "" when an example would not help.
+  - "check": one "mc" or "tf" question that tests understanding of this part (apply or predict, not its wording), answerable from this part alone.
+- "keyTerms": 3-5 terms, each with a precise one-sentence definition.
+- "connections": 0-2 short sentences on how this topic links to the other topics listed above, naming them exactly. Use [] when none of them relate.
+- "explainPrompt": one sentence asking the student to explain the heart of ${topic.title} in their own words, with their own example.
+- "explainRubric": 3-4 short, checkable points a complete explanation must cover.
+- "estMinutes": realistic minutes for the whole lesson (usually 10-20).
+
+${questionFormatRules(['mc', 'tf'])}`
+}
+
 // ---------------------------------------------------------------------------
 // Questions
 // ---------------------------------------------------------------------------
 
 const MAX_AVOID_PROMPTS = 80
 
-export function questionsInstruction(input: GenerateQuestionsInput, extra: { count: number; alreadyWritten: string[] }): string {
+/** Shorter lists for a local model: the instruction has to share a small context window with the files. */
+const COMPACT_QUIZ = { topicDescription: 160, avoidPrompts: 20, avoidLength: 120, mistakes: 3, mistakeLength: 150 }
+/**
+ * Of a local model's 20 questions to avoid, at most this many are ones it
+ * already wrote for this quiz (the newest, which a later batch is likeliest
+ * to repeat); the rest come from the latest quizzes.
+ */
+const COMPACT_WRITTEN_SHOWN = 14
+const FULL_QUIZ = { topicDescription: 400, avoidPrompts: MAX_AVOID_PROMPTS, avoidLength: 200, mistakes: 5, mistakeLength: 200 }
+
+export function questionsInstruction(input: GenerateQuestionsInput, extra: { count: number; alreadyWritten: string[] }, style: PromptStyle = {}): string {
+  const limits = style.compact ? COMPACT_QUIZ : FULL_QUIZ
   const typeList = input.types.map((t) => `"${t}" (${QUESTION_TYPE_LABELS[t]})`).join(', ')
-  const topics = input.topics.map((t, i) => `${i + 1}. ${topicLine(t)}`).join('\n')
+  const topics = input.topics.map((t, i) => `${i + 1}. ${topicLine(t, limits.topicDescription)}`).join('\n')
   const primaryIndex = input.primaryTopicId ? input.topics.findIndex((t) => t.id === input.primaryTopicId) : -1
 
   const lines: string[] = []
@@ -178,7 +244,7 @@ export function questionsInstruction(input: GenerateQuestionsInput, extra: { cou
     lines.push('- Weak spots: the student keeps getting these topics wrong. Give each of them extra questions that target the misunderstanding behind the listed mistakes from a new angle (don\'t copy the old questions):')
     for (const w of weak) {
       const index = input.topics.findIndex((t) => t.id === w.topicId) + 1
-      const mistakes = w.recentMistakes.slice(0, 5).map((m) => quoted(m, 200))
+      const mistakes = w.recentMistakes.slice(0, limits.mistakes).map((m) => quoted(m, limits.mistakeLength))
       lines.push(`  - Topic ${index} (${quoted(w.title)})${mistakes.length ? `: recent mistakes ${mistakes.join('; ')}` : ''}`)
     }
   }
@@ -196,10 +262,11 @@ export function questionsInstruction(input: GenerateQuestionsInput, extra: { cou
   lines.push('- Order the questions so topics and types are interleaved rather than grouped.')
   lines.push('- No two questions may test the same fact in the same way.')
 
-  const avoid = [...extra.alreadyWritten, ...input.avoidPrompts].slice(0, MAX_AVOID_PROMPTS)
+  const written = style.compact ? extra.alreadyWritten.slice(-COMPACT_WRITTEN_SHOWN) : extra.alreadyWritten
+  const avoid = [...written, ...input.avoidPrompts].slice(0, limits.avoidPrompts)
   if (avoid.length) {
     lines.push('- Do not repeat or lightly reword any of these questions, which the student has already seen:')
-    for (const prompt of avoid) lines.push(`  - ${quoted(prompt, 200)}`)
+    for (const prompt of avoid) lines.push(`  - ${quoted(prompt, limits.avoidLength)}`)
   }
 
   lines.push('')
@@ -211,13 +278,19 @@ export function questionsInstruction(input: GenerateQuestionsInput, extra: { cou
 // Flashcards
 // ---------------------------------------------------------------------------
 
-export function flashcardsInstruction(input: {
-  notebookName: string
-  topic: TopicBrief
-  lessonSummary: string
-  sources: AiSourceDoc[]
-  count: number
-}): string {
+export function flashcardsInstruction(
+  input: {
+    notebookName: string
+    topic: TopicBrief
+    lessonSummary: string
+    sources: AiSourceDoc[]
+    count: number
+  },
+  style: PromptStyle = {}
+): string {
+  // "Up to" lets Claude write fewer cards for a short lesson; a local model takes it as licence to write very few,
+  // and fewer than half is rejected, so it is asked for the number outright.
+  const countRule = style.compact ? `${input.count} cards, all different.` : `Up to ${input.count} cards, all different.`
   return `Task: write ${input.count} flashcards for spaced-repetition review of the topic "${input.topic.title}" in the course "${input.notebookName}". The student has just studied the lesson below.
 
 <lesson>
@@ -227,7 +300,7 @@ ${input.lessonSummary}
 ${sourcesNote(input.sources)}
 
 Rules:
-- Up to ${input.count} cards, all different. Cover every key term and the core ideas of each lesson part: what things are, why they work, when to use them, how they compare, and their complexities where relevant.
+- ${countRule} Cover every key term and the core ideas of each lesson part: what things are, why they work, when to use them, how they compare, and their complexities where relevant.
 - "front": one question about exactly one fact or idea, answerable from memory without seeing options (e.g. "Why does binary search need a sorted array?", not "Binary search"). Avoid yes/no questions and questions whose answer is a list of more than 3 items.
 - "back": the short, complete answer (one to three sentences, or a tiny code snippet in a fenced block). Correct and self-contained, and specific enough that the student can tell whether what they recalled matches.
 - No two cards may ask for the same thing.
@@ -244,6 +317,31 @@ export function lessonDigest(lesson: {
   const parts = lesson.chunks.map((c, i) => `## Part ${i + 1}: ${c.heading}\n${c.body}${c.example ? `\n\nExample:\n${c.example}` : ''}`)
   const terms = lesson.keyTerms.map((k) => `- ${k.term}: ${k.definition}`).join('\n')
   return `# ${lesson.title}\n${lesson.overview}\n\n${parts.join('\n\n')}\n\n## Key terms\n${terms}`
+}
+
+/**
+ * The lesson digest cut to about `maxChars` for a local model: headings, key
+ * terms and the overview stay whole, and each part's body and example share
+ * what is left. A lesson written by Claude can be 30,000 characters, more
+ * than a small context window holds next to the files.
+ */
+export function compactLessonDigest(
+  lesson: Parameters<typeof lessonDigest>[0],
+  maxChars: number
+): string {
+  const full = lessonDigest(lesson)
+  if (full.length <= maxChars) return full
+  const terms = lesson.keyTerms.map((k) => `- ${k.term}: ${oneLine(k.definition, 200)}`).join('\n')
+  const head = `# ${lesson.title}\n${oneLine(lesson.overview, 600)}`
+  const tail = `## Key terms\n${terms}`
+  const headings = lesson.chunks.map((c, i) => `## Part ${i + 1}: ${c.heading}`)
+  const fixed = head.length + tail.length + headings.join('').length + 8 * (lesson.chunks.length + 2)
+  const perPart = Math.max(120, Math.floor((maxChars - fixed) / Math.max(1, lesson.chunks.length)))
+  const parts = lesson.chunks.map((c, i) => {
+    const text = c.example ? `${c.body}\n\nExample:\n${c.example}` : c.body
+    return `${headings[i]}\n${text.length > perPart ? `${text.slice(0, perPart - 1).trimEnd()}…` : text}`
+  })
+  return `${head}\n\n${parts.join('\n\n')}\n\n${tail}`
 }
 
 // ---------------------------------------------------------------------------
@@ -312,7 +410,7 @@ Rules:
 // Source summary
 // ---------------------------------------------------------------------------
 
-export function summaryInstruction(input: { notebookName: string; source: AiSourceDoc }): string {
+export function summaryInstruction(input: { notebookName: string; source: AiSourceDoc }, style: PromptStyle = {}): string {
   return `Task: write a study summary of the attached file "${input.source.name}" from the course "${input.notebookName}".
 
 Fields:
@@ -322,7 +420,36 @@ Fields:
   - "## Definitions": each term the file defines, in bold, with a precise one-sentence definition.
   - "## Likely exam points": what a student is most likely to be tested on (things the file stresses, formulas, traces, comparisons, classic pitfalls), as bullets, citing the page or slide in brackets like (page 4).
   Add a "## Worked example" section only when the file contains an example worth redoing.
-- Keep it to what the file says; about 300-900 words depending on the file's length.`
+- Keep it to what the file says; about ${style.compact ? '200-500' : '300-900'} words depending on the file's length.`
+}
+
+/**
+ * A compact picture of a JSON schema ({"title": string, "warmup": [{...}, ...]}).
+ * Ollama's structured outputs guide recommends also giving the schema in the
+ * prompt; this outline grounds a local model at a fraction of the schema's
+ * size (the field rules are already in the instruction).
+ */
+export function jsonOutline(schema: JsonSchema): string {
+  if (Array.isArray(schema.anyOf)) return (schema.anyOf as JsonSchema[]).map(jsonOutline).join(' | ')
+  if (Array.isArray(schema.enum)) return schema.enum.map((value) => JSON.stringify(value)).join(' | ')
+  switch (schema.type) {
+    case 'object': {
+      const properties = (schema.properties ?? {}) as Record<string, JsonSchema>
+      return `{${Object.entries(properties)
+        .map(([key, value]) => `"${key}": ${jsonOutline(value)}`)
+        .join(', ')}}`
+    }
+    case 'array':
+      return `[${jsonOutline((schema.items ?? {}) as JsonSchema)}, ...]`
+    case 'string':
+    case 'integer':
+    case 'number':
+    case 'boolean':
+    case 'null':
+      return schema.type
+    default:
+      return 'any'
+  }
 }
 
 /** Appended to the instruction when the first answer could not be used. */

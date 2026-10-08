@@ -19,6 +19,8 @@ export function isAppError(err: unknown): err is AppError {
 export const ERROR_MESSAGES: Record<AppErrorCode, string> = {
   NO_API_KEY: 'Add your Anthropic API key in Settings to use AI features.',
   INVALID_API_KEY: 'Your API key was rejected. Check it in Settings.',
+  OLLAMA_UNREACHABLE: "Couldn't reach Ollama. Make sure the Ollama app is running, then try again.",
+  NO_AI_MODEL: 'Choose an Ollama model in Settings.',
   RATE_LIMITED: 'The AI is busy right now. Try again in a minute.',
   AI_REFUSED: 'The AI declined this request. Try rewording it or using different files.',
   AI_BAD_OUTPUT: 'The AI returned something unexpected. Try again.',

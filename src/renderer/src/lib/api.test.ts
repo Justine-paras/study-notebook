@@ -39,6 +39,25 @@ describe('api client', () => {
     expect(apiError.retryable).toBe(false)
   })
 
+  it("sends Ollama setup problems to Settings without retrying them, in the main process's words", async () => {
+    const messages = {
+      OLLAMA_UNREACHABLE: "Couldn't reach Ollama at http://127.0.0.1:11434. Start the Ollama app and check that the address is right, then try again.",
+      NO_AI_MODEL: 'qwen3:8b isn\'t installed in Ollama. Open a terminal and run "ollama pull qwen3:8b", or choose another model in Settings.'
+    }
+    for (const code of ['OLLAMA_UNREACHABLE', 'NO_AI_MODEL'] as const) {
+      installBridge(async () => ({ ok: false, error: { code, message: messages[code] } }))
+      const err = (await api.summarizeSource('s1').catch((e: unknown) => e)) as ApiError
+      expect(err.code).toBe(code)
+      // The address or the pull command is the advice, so it is shown, not hidden under Details.
+      expect(err.friendly).toBe(messages[code])
+      expect(err.needsSettings).toBe(true)
+      expect(err.retryable).toBe(false)
+      // Without a message the generic sentence still says what to do.
+      installBridge(async () => ({ ok: false, error: { code, message: '' } }))
+      expect(((await api.summarizeSource('s1').catch((e: unknown) => e)) as ApiError).friendly).toBe(ERROR_MESSAGES[code])
+    }
+  })
+
   it("shows the main process's own sentence for refusals, oversized requests and invalid input", async () => {
     const refusal = 'The AI declined this request because it touches on security. Try fewer files.'
     installBridge(async () => ({ ok: false, error: { code: 'AI_REFUSED', message: refusal } }))

@@ -24,7 +24,7 @@ the bottom to see the layout, copy and states).
 | Storage | SQLite through `node:sqlite` (`DatabaseSync`, built into Electron's Node, zero native deps) |
 | Files | pdfjs-dist 6 (PDF), mammoth (DOCX), jszip (PPTX), fs (TXT/MD) |
 | Spaced repetition | ts-fsrs 5 (FSRS) |
-| AI | @anthropic-ai/sdk 0.131, default model `claude-opus-5-5` (Settings lets the learner pick Sonnet 5.5 or Haiku 4.5) |
+| AI | Claude by default: @anthropic-ai/sdk 0.131, model `claude-opus-5-5` (Settings lets the learner pick Sonnet 5.5 or Haiku 4.5). Or Ollama, a local model server, over its HTTP API with `node:http` (no SDK) |
 | Validation | zod 4 |
 | Tests | vitest 3 (unit/integration, Node), Playwright `_electron` (end-to-end, run under `xvfb-run`) |
 
@@ -44,7 +44,7 @@ src/main/context.ts      AppContext, DesktopAdapter (CONTRACT, read-only)
 src/main/db/**           SQLite schema, migrations, repositories    [backend agent]
 src/main/services/**     one service per StudyApi method            [backend agent]
 src/main/files/**        file copy + text extraction                [files agent]
-src/main/ai/**           Claude client, prompts, schemas, demo mode [ai agent]
+src/main/ai/**           Claude and Ollama clients, prompts, schemas, demo mode [ai agent]
 src/preload/**           contextBridge (lead, read-only)
 src/renderer/**          React app                                  [renderer agents, see below]
 tests/e2e/**             Playwright end-to-end tests                [integration]
@@ -109,7 +109,7 @@ Security rules (src/main/security.ts, src/main/files/access.ts):
 (DatabaseSync), `ai` (StudyAi), `paths`, `desktop` (Electron-only actions),
 `emitAiProgress`, `now()`, `demoAi`. Tests build their own context with
 `openDatabase(':memory:')`, a temp library folder, a fake DesktopAdapter and
-`new StudyAi(() => ({ apiKey: null, model: 'claude-opus-5-5', demo: true }))`.
+`new StudyAi(() => ({ provider: 'claude', apiKey: null, model: 'claude-opus-5-5', demo: true }))`.
 
 Environment variables:
 
@@ -205,6 +205,14 @@ chosen file, and the live database (or its -wal/-shm) is refused as a target.
 Source text budget for AI calls (backend decides what to send):
 
 - Per call send at most ~600,000 characters of source text (~150k tokens).
+  With Ollama the budget comes from the context size instead
+  (`ollamaSourceCharBudget` in src/main/ai/ollama.ts: what is left of
+  `num_ctx` after the largest answer and the prompt, at 3 characters per
+  token, from about 4,600 characters at 8K to about 360,000 at 128K). Text
+  in other scripts takes more tokens per character (Chinese about one per
+  character), so for Ollama the selection is redone with a smaller budget
+  until its estimated tokens fit (`selectWithinBudget` in
+  services/topicSources.ts, `estimateTokens` in ollama.ts).
 - Choose sources for a topic: the topic's `sourceIds` if set, otherwise all
   `ready` sources of the notebook except `exam`/`quiz` kinds for lessons
   (past exams and quizzes are used for question style in quizzes and mock
@@ -220,6 +228,43 @@ Source text budget for AI calls (backend decides what to send):
   topic description".
 
 ## AI (ai agent)
+
+Two providers write lessons, questions and feedback. The learner picks one
+in Settings (`settings.aiProvider`, default `'claude'`); demo mode overrides
+both.
+
+- **Claude**, through the Anthropic API with the learner's key. The notes
+  below are about Claude; its behaviour does not depend on Ollama existing.
+- **Ollama**, a model server on the learner's own computer
+  (src/main/ai/ollama.ts, `node:http` to its HTTP API at
+  `settings.ollamaUrl`, default `http://127.0.0.1:11434`; not `fetch`, whose
+  300-second timeouts would cut off a slow run on a CPU-only laptop).
+  Generation is a streamed `POST /api/chat` (NDJSON) to the installed model
+  in `settings.ollamaModel`, with the task's JSON Schema as `format` and
+  `options.num_ctx` set to `settings.ollamaContextTokens` (8K to 128K
+  tokens, capped at the model's own limit from `POST /api/show`). Local models get
+  compact prompt variants (prompts.ts) and the files as plain text, and their
+  answers go through the same zod validation and retry as Claude's.
+  `GET /api/tags` lists the installed models (`listOllamaModels`, at the
+  saved address or at one passed in; cloud models, which run on ollama.com,
+  are left out). A server that can't be reached, a connection that breaks
+  mid-answer, or no first token within 10 minutes plus 0.1 s per prompt token
+  is `OLLAMA_UNREACHABLE`; no model chosen, one that isn't installed or
+  can't chat, or one that runs out of memory is `NO_AI_MODEL`. Both are
+  fixed in Settings, so the renderer never retries them automatically, and
+  it shows the main process's message for them (it names the address or the
+  `ollama pull` command).
+- A local model's answers are parsed with `lenient` (schemas.ts, "Repairs
+  for local models"): lettered options, an answer like "C) O(n)", a
+  true/false question written as multiple choice, blank list entries,
+  "None" placeholders and written-out exam dates are repaired instead of
+  rejected. Its quizzes are written in batches with up to a few top-up
+  calls, and a quiz still short at the end is completed with questions that
+  only repeat an earlier quiz's. Claude's answers are parsed strictly, with
+  one top-up, as before.
+- `StudyAi` reads the current settings for every call, so a switch in
+  Settings applies to the next AI action. `testApiKey` tests whichever
+  provider is chosen.
 
 Read the claude-api skill notes summarised here (they override anything you
 remember):
@@ -385,10 +430,12 @@ Touch targets at least 40px tall. Real `<button>`, `<a>`, `<input>`,
   Always show `<AiWorking task=... startedAt={job.startedAt}
   subjectId=... />` (live progress, elapsed time, a calm explanation) and
   errors with `<ErrorNotice error=... onRetry onDismiss addFilesTo=... />`
-  (friendly text; a Settings button for `NO_API_KEY`/`INVALID_API_KEY`, an
+  (friendly text; a Settings button for `NO_API_KEY`/`INVALID_API_KEY` and
+  `OLLAMA_UNREACHABLE`/`NO_AI_MODEL`, an
   "Add files" button for `NO_SOURCES`). For `AI_REFUSED`,
-  `SOURCE_TOO_LARGE` and `INVALID_INPUT` the friendly text is the main
-  process's own message, which says what to do.
+  `SOURCE_TOO_LARGE`, `INVALID_INPUT`, `OLLAMA_UNREACHABLE` and
+  `NO_AI_MODEL` the friendly text is the main process's own message, which
+  says what to do.
 - `refetchAfterMutation` (lib/queries.ts) resolves once the active queries
   have refetched; `useDayRollover` (in the App layout) refetches everything
   when the local date changes.
@@ -481,9 +528,21 @@ sentence of interpretation), reviews due next 7 days (bar chart), mistake log
 (prompt, your answer, correct answer, date), study time by day (last 14 days)
 and by subject, streak.
 
-**Settings**: API key (password field, save, test connection, remove;
+**Settings**: AI provider (Claude or Ollama, a segmented control that saves
+at once). Claude: API key (password field, save, test connection, remove;
 explain it is stored encrypted on this computer and costs a little per
-use; link to console.anthropic.com), model select, theme, focus/break
+use; link to console.anthropic.com), model select. Ollama
+(components/settings/OllamaSection.tsx): status, the trade-off (free and
+private, but slower and less accurate than Claude; 16 GB of memory
+recommended) with a link to ollama.com, address (saved on blur or Enter,
+errors under the field, a button back to the usual address), installed
+models from `listOllamaModels` with Refresh (a saved model that is gone
+stays listed as "not installed"), context size, test connection, and
+step-by-step setup help (install, open, `ollama pull qwen3:8b` or
+`qwen3:4b` on 8 GB laptops) while Ollama can't be reached or has no models.
+In demo mode the section doesn't look for Ollama ("Not needed in demo mode").
+Waiting copy says "several minutes" instead of "a minute or two" with
+Ollama (`useLocalAi`). Then theme, focus/break
 minutes, new topics per day, max reviews per day, desired retention (slider
 0.80-0.97 with explanation), backup (export), open data folder, demo-mode
 notice when `settings.demoAi`.
@@ -499,8 +558,13 @@ end of each phase), settings icon button.
 - Unit/integration: `npx vitest run`. Services are tested end to end with an
   in-memory DB and demo AI (tests/fixtures may be generated in the test).
 - E2E: `npx electron-vite build && xvfb-run -a npx playwright test` launches
-  `out/main/index.js` with `STUDY_DEMO_AI=1`, a temp `STUDY_DATA_DIR` and
-  `STUDY_ALLOW_MULTIPLE=1`.
+  `out/main/index.js` with a temp `STUDY_DATA_DIR` and
+  `STUDY_ALLOW_MULTIPLE=1`: tests/e2e/app.spec.ts with `STUDY_DEMO_AI=1`,
+  tests/e2e/ollama.spec.ts without demo mode or a key, against a fake Ollama
+  (tests/e2e/fakeOllama.ts: `/api/tags`, `/api/show` and a streamed
+  `/api/chat` that answers any `format` schema with valid JSON). It records
+  every request, so the test checks the model, `num_ctx`, `format` and
+  `stream` the app sent.
 - Packaged app (`electron-builder --linux dir` or `--win --dir`): the fuses
   turn off `--inspect`, which Playwright's `_electron` needs, so drive the
   real build over CDP (`--remote-debugging-port=0`, then

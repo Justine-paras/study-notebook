@@ -1,12 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createDebouncer } from './debounce'
+import { OLLAMA_CONTEXT_SIZES, type OllamaModelInfo } from '@shared/types'
 import {
   NUMBER_SETTINGS,
+  OLLAMA_CONTEXT_OPTIONS,
   RETENTION_MAX,
   RETENTION_MIN,
   apiKeyInputError,
   apiKeyStatus,
+  formatModelSize,
   formatRetention,
+  isMissingOllamaModel,
+  ollamaModelLabel,
+  ollamaModelOptions,
+  ollamaStatus,
+  parseContextSize,
   parseWholeNumber,
   retentionHint
 } from './settingsModel'
@@ -60,6 +68,53 @@ describe('API key', () => {
     expect(apiKeyStatus({ hasApiKey: true, demoAi: true })).toBe('saved')
     expect(apiKeyStatus({ hasApiKey: false, demoAi: true })).toBe('demo')
     expect(apiKeyStatus({ hasApiKey: false, demoAi: false })).toBe('missing')
+  })
+})
+
+describe('Ollama', () => {
+  const qwen: OllamaModelInfo = { name: 'qwen3:8b', sizeBytes: 5_225_387_923, parameterSize: '8.2B', quantization: 'Q4_K_M' }
+  const bare: OllamaModelInfo = { name: 'my-model:latest', sizeBytes: 0, parameterSize: null, quantization: ' ' }
+
+  it('labels models with what Ollama reports, sized like `ollama list`', () => {
+    expect(ollamaModelLabel(qwen)).toBe('qwen3:8b · 8.2B · Q4_K_M · 5.2 GB')
+    expect(ollamaModelLabel(bare)).toBe('my-model:latest')
+    expect(formatModelSize(980_000_000)).toBe('980 MB')
+    expect(formatModelSize(Number.NaN)).toBeNull()
+  })
+
+  it('keeps the saved model in the list, marked when Ollama no longer has it', () => {
+    expect(ollamaModelOptions([qwen], 'qwen3:8b', true)).toEqual([{ value: 'qwen3:8b', label: ollamaModelLabel(qwen) }])
+    expect(ollamaModelOptions([qwen], 'llama3.2:latest', true)[0]).toEqual({
+      value: 'llama3.2:latest',
+      label: 'llama3.2:latest (not installed)'
+    })
+    // Ollama didn't answer: nothing is known about the saved model.
+    expect(ollamaModelOptions([], 'llama3.2:latest', false)).toEqual([{ value: 'llama3.2:latest', label: 'llama3.2:latest' }])
+    expect(ollamaModelOptions([], null, true)).toEqual([])
+    expect(isMissingOllamaModel([qwen], 'qwen3:8b')).toBe(false)
+    expect(isMissingOllamaModel([qwen], 'qwen3:4b')).toBe(true)
+    expect(isMissingOllamaModel([qwen], null)).toBe(false)
+  })
+
+  it('says where the learner stands', () => {
+    expect(ollamaStatus(undefined, null)).toBe('checking')
+    expect(ollamaStatus({ ok: false, models: [] }, 'qwen3:8b')).toBe('unreachable')
+    expect(ollamaStatus({ ok: true, models: [] }, null)).toBe('no-models')
+    expect(ollamaStatus({ ok: true, models: [qwen] }, null)).toBe('choose')
+    expect(ollamaStatus({ ok: true, models: [qwen] }, 'qwen3:4b')).toBe('missing')
+    expect(ollamaStatus({ ok: true, models: [qwen, bare] }, 'qwen3:8b')).toBe('ready')
+    // Demo mode doesn't use Ollama, so it isn't looked for or reported missing.
+    expect(ollamaStatus(undefined, null, true)).toBe('demo')
+    expect(ollamaStatus({ ok: false, models: [] }, null, true)).toBe('demo')
+  })
+
+  it('offers every context size and reads the choice back', () => {
+    expect(OLLAMA_CONTEXT_OPTIONS.map((o) => Number(o.value))).toEqual([...OLLAMA_CONTEXT_SIZES])
+    expect(OLLAMA_CONTEXT_OPTIONS[0]!.label).toBe('8K tokens (least memory)')
+    expect(OLLAMA_CONTEXT_OPTIONS.at(-1)!.label).toBe('128K tokens (needs a lot of memory)')
+    expect(parseContextSize('32768')).toBe(32768)
+    expect(parseContextSize('4096')).toBeNull()
+    expect(parseContextSize('')).toBeNull()
   })
 })
 

@@ -122,7 +122,7 @@ export class TestStudyAi extends StudyAi {
   readonly client: FakeClient
 
   constructor(responses: ScriptedResponse[], model: AiModelId = 'claude-opus-5-5', retrieveError?: unknown) {
-    super(() => ({ apiKey: 'sk-ant-test', model, demo: false }))
+    super(() => ({ provider: 'claude', apiKey: 'sk-ant-test', model, demo: false }))
     this.client = new FakeClient(responses, retrieveError)
   }
 

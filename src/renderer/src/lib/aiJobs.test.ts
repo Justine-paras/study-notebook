@@ -181,6 +181,13 @@ describe('finishedJobToast', () => {
     expect(go).toHaveBeenCalledWith('/settings')
   })
 
+  it('sends Ollama problems to Settings too', () => {
+    for (const code of ['OLLAMA_UNREACHABLE', 'NO_AI_MODEL']) {
+      const toast = finishedJobToast(job({ status: 'error', error: new ApiError(code, 'x') }), vi.fn())
+      expect(toast?.action?.label).toBe('Open Settings')
+    }
+  })
+
   it('links other failures back to where the job can be retried', () => {
     const go = vi.fn()
     const toast = finishedJobToast(job({ status: 'error', task: 'summary', label: 'Week 2.pdf', href: '/notebooks/nb1', error: new ApiError('NETWORK', 'offline') }), go)

@@ -74,7 +74,7 @@ export function createTestContext(options: { now?: Date; ai?: StudyAi; demoAi?: 
   const progressEvents: AiProgressEvent[] = []
   const ctx: TestContext = {
     db,
-    ai: options.ai ?? new StudyAi(() => ({ apiKey: null, model: 'claude-opus-5-5', demo: true })),
+    ai: options.ai ?? new StudyAi(() => ({ provider: 'claude', apiKey: null, model: 'claude-opus-5-5', demo: true })),
     paths: { dataDir: tempDir, libraryDir, dbPath: ':memory:' },
     desktop: createFakeDesktop(),
     emitAiProgress: (event) => progressEvents.push(event),

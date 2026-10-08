@@ -144,7 +144,8 @@ const notebooks = await api.listNotebooks()
 - `api` is a `StudyApi`: every method of `src/shared/api.ts`, same arguments.
 - Failures throw `ApiError` with `code` (an `AppErrorCode` or other string),
   `message` (technical), `friendly` (learner text from `ERROR_MESSAGES`),
-  `method`, and getters `retryable` and `needsSettings` (missing/invalid key).
+  `method`, and getters `retryable` and `needsSettings` (missing/invalid key,
+  Ollama unreachable, no Ollama model).
 - Outside Electron (no `window.studyBridge`) calls throw code `NO_BRIDGE`
   with a clear message. `hasBridge()` tells you up front.
 - `toApiError(anything)` and `friendlyMessage(anything)` normalize errors.
@@ -177,13 +178,14 @@ last argument of react-query options (`enabled`, `staleTime`,
 | `useToday()` | `TodayOverview` |
 | `useInsights()` | `Insights` |
 | `useSettings()` | `Settings` |
+| `useOllamaModels(url)` | `{ ok, message, models: OllamaModelInfo[] }` (ok false with a message when Ollama can't be reached) |
 
 `queryKeys.<name>(...)` gives the keys (each starts with the method name, e.g.
 `['listTopics', notebookId]`) for `setQueryData` or targeted invalidation.
 
 Defaults (`createQueryClient`): `staleTime` 10s, refetch on window focus,
 reads retried once unless the error can't fix itself (`NOT_FOUND`,
-`NO_API_KEY`, ...), mutations never retried.
+`NO_API_KEY`, `OLLAMA_UNREACHABLE`, ...), mutations never retried.
 
 **Review queues:** every mutation invalidates the queue, so copy
 `useReviewQueue(...).data` into local state when a session starts (or pass
@@ -277,6 +279,8 @@ const { preference, setPreference } = useTheme()
 - Plan text: `pluralize(pomodoroCount(plan.totalMinutes, pomo.focusMinutes), 'Pomodoro')`.
 
 ### AI progress (lib/aiProgress.ts)
+
+`useLocalAi()` (lib/useLocalAi.ts) is true when Ollama, not Claude or the demo, writes: local models are several times slower, so say "several minutes" instead of "a minute or two" in waiting copy. `<AiWorking>` already does.
 
 `useAiProgress(task?, since?, subjectId?)` -> latest `AiProgressEvent` (`{ jobId, task, subjectId, progress: 0-1 | null, message }`) received since `since` (default: mount), or `null`. With `subjectId` (topic, file or notebook id) another job of the same task is ignored. `<AiWorking>` already uses it; you rarely need it directly.
 

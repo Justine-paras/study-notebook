@@ -12,7 +12,10 @@ import {
   parseLessonOutput,
   parseQuestionsOutput,
   parseSyllabusOutput,
+  parseWrittenDate,
   QUESTIONS_JSON_SCHEMA,
+  questionsJsonSchema,
+  repairChoiceQuestion,
   SUMMARY_JSON_SCHEMA,
   SYLLABUS_JSON_SCHEMA,
   topicIdForIndex
@@ -280,5 +283,117 @@ describe('parseSyllabusOutput', () => {
     expect(result.topics.map((t) => t.title)).toEqual(['Hash tables'])
     expect(result.exams[0]).toEqual({ name: 'Midterm', examDate: null, coversTopicTitles: ['Stacks', 'Hash tables'] })
     expect(result.exams[1].examDate).toBe('2026-12-10')
+  })
+})
+
+describe('repairs for local models (lenient)', () => {
+  const mc = (answer: string, options: string[]) => ({ type: 'mc' as const, options, answer })
+  const complexities = ['O(1)', 'O(log n)', 'O(n)', 'O(n log n)']
+
+  it('limits the quiz schema to the chosen types, and the full schema is the one Claude gets', () => {
+    expect(questionsJsonSchema(['mc', 'tf', 'fill', 'identification'])).toEqual(QUESTIONS_JSON_SCHEMA)
+    const narrow = questionsJsonSchema(['tf']) as { properties: { questions: { items: { properties: { type: { enum: string[] } } } } } }
+    expect(narrow.properties.questions.items.properties.type.enum).toEqual(['tf'])
+  })
+
+  it('matches an answer given with its letter, a final period or different spacing', () => {
+    expect(repairChoiceQuestion(mc('C) O(n)', complexities), false)).toMatchObject({ answer: 'O(n)' })
+    expect(repairChoiceQuestion(mc('O(n).', complexities), false)).toMatchObject({ answer: 'O(n)' })
+    expect(repairChoiceQuestion(mc(' o(n) ', complexities), false)).toMatchObject({ answer: 'O(n)' })
+    // Letter and text disagree, or the text names no option: left for the check to reject.
+    expect(repairChoiceQuestion(mc('A) O(n)', complexities), false).answer).toBe('A) O(n)')
+    expect(repairChoiceQuestion(mc('O(n^2)', complexities), false).answer).toBe('O(n^2)')
+  })
+
+  it('takes the letters off lettered options', () => {
+    const lettered = ['A) O(1)', 'B) O(log n)', 'C) O(n)', 'D) O(n log n)']
+    expect(repairChoiceQuestion(mc('O(log n)', lettered), false)).toMatchObject({ options: complexities, answer: 'O(log n)' })
+    expect(repairChoiceQuestion(mc('(D) O(n log n)', lettered), false)).toMatchObject({ options: complexities, answer: 'O(n log n)' })
+    // Letters out of order are part of the options.
+    const odd = ['B) one', 'A) two', 'C) three']
+    expect(repairChoiceQuestion(mc('B) one', odd), false).options).toEqual(odd)
+  })
+
+  it('turns a true/false statement written as multiple choice into a true/false question when that type is allowed', () => {
+    expect(repairChoiceQuestion(mc('B', ['True', 'False']), true)).toMatchObject({ type: 'tf', options: ['True', 'False'], answer: 'False' })
+    expect(repairChoiceQuestion(mc('true', ['true', 'false']), false)).toMatchObject({ type: 'mc' })
+  })
+
+  it('applies only when asked: Claude answers are checked strictly as before', () => {
+    const item = rawQuestion({ answer: 'A) Preorder', options: ['A) Preorder', 'B) Inorder', 'C) Postorder'] })
+    const context = { topics, primaryTopicId: null, types: ['mc' as const], difficulty: 'mixed' as const }
+    expect(parseQuestionsOutput({ questions: [item] }, context).questions[0]).toMatchObject({ options: ['A) Preorder', 'B) Inorder', 'C) Postorder'], answer: 'A) Preorder' })
+    expect(parseQuestionsOutput({ questions: [rawQuestion({ answer: 'Preorder.' })] }, context).questions).toHaveLength(0)
+    expect(parseQuestionsOutput({ questions: [rawQuestion({ answer: 'Preorder.' })] }, { ...context, lenient: true }).questions[0].answer).toBe('Preorder')
+    // A multiple-choice true/false becomes "tf" only when that type is allowed.
+    const tfItem = rawQuestion({ options: ['True', 'False'], answer: 'True' })
+    expect(parseQuestionsOutput({ questions: [tfItem] }, { ...context, lenient: true }).questions).toHaveLength(0)
+    expect(parseQuestionsOutput({ questions: [tfItem] }, { ...context, types: ['mc', 'tf'], lenient: true }).questions[0].type).toBe('tf')
+  })
+
+  it("keeps a lesson whose check has lettered options, or whose lists end in a blank entry", () => {
+    const check = { type: 'mc', prompt: 'Which is LIFO?', options: ['A) Stack', 'B) Queue', 'C) Heap'], answer: 'A) Stack', explanation: 'Last in, first out.', difficulty: 'easy', sourceRef: '' }
+    const tfCheck = { ...check, type: 'tf', options: ['True', 'False'], answer: 'True' }
+    const lesson = {
+      title: 'Stacks',
+      overview: 'Stacks.',
+      estMinutes: 15,
+      warmup: [tfCheck, { ...check, answer: 'Stack.' }],
+      chunks: [1, 2, 3].map((i) => ({ heading: `Part ${i}`, body: 'Body', example: '', check })),
+      keyTerms: [
+        { term: 'push', definition: 'Add on top.' },
+        { term: 'pop', definition: 'Remove the top.' },
+        { term: 'peek', definition: 'Read the top.' },
+        { term: 'top', definition: ' ' }
+      ],
+      connections: ['', 'Queues are the FIFO cousin.'],
+      explainPrompt: 'Explain stacks.',
+      explainRubric: ['LIFO', 'push/pop', 'O(1) operations', '']
+    }
+    expect(() => parseLessonOutput(lesson, { topic: topics[0], sourceNames: [] })).toThrow(OutputError)
+    const content = parseLessonOutput(lesson, { topic: topics[0], sourceNames: [], lenient: true })
+    expect(content.chunks[0].check).toMatchObject({ options: ['Stack', 'Queue', 'Heap'], answer: 'Stack' })
+    expect(content.warmup[1].answer).toBe('Stack')
+    expect(content.keyTerms.map((k) => k.term)).toEqual(['push', 'pop', 'peek'])
+    expect(content.connections).toEqual(['Queues are the FIFO cousin.'])
+    expect(content.explainRubric).toEqual(['LIFO', 'push/pop', 'O(1) operations'])
+  })
+
+  it('drops a blank flashcard instead of the deck', () => {
+    const deck = {
+      cards: [
+        { front: 'What is a stack?', back: 'A LIFO list.', sourceRef: '' },
+        { front: 'What does pop return?', back: '', sourceRef: '' },
+        { front: 'What is push?', back: 'Adds on top.', sourceRef: '' }
+      ]
+    }
+    expect(() => parseFlashcardsOutput(deck, { count: 3 })).toThrow(OutputError)
+    expect(parseFlashcardsOutput(deck, { count: 3, lenient: true }).map((c) => c.front)).toEqual(['What is a stack?', 'What is push?'])
+  })
+
+  it('leaves out "None" placeholders in explanation feedback', () => {
+    const feedback = { score: 60, covered: ['LIFO'], missing: ['N/A'], misconceptions: ['None.', 'No misconceptions found', 'Says pop is O(n): it is O(1)'], suggestion: 'Trace it.' }
+    expect(parseExplanationOutput(feedback).misconceptions).toHaveLength(3)
+    expect(parseExplanationOutput(feedback, { lenient: true })).toMatchObject({ missing: [], misconceptions: ['Says pop is O(n): it is O(1)'] })
+  })
+
+  it('reads written-out exam dates and topic titles reworded with "&"', () => {
+    expect(parseWrittenDate('October 20, 2026')).toBe('2026-10-20')
+    expect(parseWrittenDate('Tue, Oct. 6 2026')).toBe('2026-10-06')
+    expect(parseWrittenDate('3rd December 2026')).toBe('2026-12-03')
+    expect(parseWrittenDate('Sept 31, 2026')).toBeNull()
+    expect(parseWrittenDate('Ju 4, 2026')).toBeNull()
+    expect(parseWrittenDate('next Tuesday')).toBeNull()
+    const output = {
+      courseCode: '',
+      topics: [{ title: 'Arrays and linked lists', description: '', unitLabel: '' }],
+      exams: [{ name: 'Midterm', examDate: 'October 20, 2026', coversTopicTitles: ['Arrays & Linked Lists', 'Stacks.'] }]
+    }
+    expect(parseSyllabusOutput(output, { existingTopicTitles: ['Stacks'] }).exams[0]).toEqual({ name: 'Midterm', examDate: null, coversTopicTitles: [] })
+    expect(parseSyllabusOutput(output, { existingTopicTitles: ['Stacks'], lenient: true }).exams[0]).toEqual({
+      name: 'Midterm',
+      examDate: '2026-10-20',
+      coversTopicTitles: ['Arrays and linked lists', 'Stacks']
+    })
   })
 })

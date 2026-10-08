@@ -3,11 +3,19 @@
 // never as SQLite binding errors or TypeErrors, which the renderer can only
 // show as "Something went wrong".
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { STUDY_API_METHODS, type StudyApiMethod } from '@shared/api'
 import { AppError } from '@shared/errors'
 import { services } from '../../src/main/services'
 import { createTestContext, type TestContext } from './helpers/context'
+
+// Junk such as "x" or an id is a valid host name, so listOllamaModels would
+// try to reach it, and Windows takes seconds to give up on each address.
+// The address is still validated; only the request itself is left out.
+vi.mock('../../src/main/ai/ollama', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/main/ai/ollama')>()),
+  fetchOllamaModels: async () => ({ ok: false, message: 'Not contacted in this test.', models: [] })
+}))
 
 const JUNK: unknown[] = [
   undefined, null, 0, -1, 1.5, Number.NaN, '', 'x', {}, [], [1], { a: 1 }, true, { topicId: {} }, { topicIds: [{}] }, { kind: {} }, { title: {}, body: {} }
