@@ -3,7 +3,7 @@
 // "1", "a", "escape", "arrowleft", "mod+enter" (Ctrl on Windows, Cmd on macOS),
 // "shift+?". Several combos can share a handler: "space, enter".
 
-import { useEffect, useRef } from 'react'
+import { useLayoutEffect, useRef } from 'react'
 
 export type HotkeyHandler = (event: KeyboardEvent) => void
 export type HotkeyMap = Record<string, HotkeyHandler>
@@ -125,7 +125,10 @@ export function useHotkeys(map: HotkeyMap, options: HotkeyOptions = {}): void {
   const mapRef = useRef(map)
   mapRef.current = map
 
-  useEffect(() => {
+  // A layout effect attaches the listener in the same commit that shows the
+  // new screen state (the next flashcard, say). A passive effect runs a moment
+  // later, and a key pressed in that gap would be lost.
+  useLayoutEffect(() => {
     if (!enabled) return
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.isComposing || event.repeat) return
