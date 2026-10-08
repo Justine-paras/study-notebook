@@ -1,0 +1,20 @@
+.notebooks__empty {
+  align-items: center;
+}
+
+.notebooks__section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.notebooks__section-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.notebooks__note {
+  font-size: var(--text-sm);
+  color: var(--muted);
+}

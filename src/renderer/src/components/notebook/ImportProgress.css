@@ -1,0 +1,100 @@
+.import-progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: 10px var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.import-progress__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: 28px;
+}
+
+.import-progress__summary {
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.import-progress__clear {
+  min-height: 32px;
+  padding: 0 var(--space-2);
+  border: none;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--link);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.import-progress__clear:hover {
+  color: var(--link-hover);
+  background: var(--surface);
+}
+
+.import-progress__list {
+  display: flex;
+  flex-direction: column;
+  max-height: 240px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.import-progress__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+}
+
+.import-progress__icon {
+  flex: none;
+  display: flex;
+  color: var(--muted);
+}
+
+.import-progress__item--done .import-progress__icon {
+  color: var(--good);
+}
+
+.import-progress__item--warning .import-progress__icon {
+  color: var(--warn);
+}
+
+.import-progress__item--failed .import-progress__icon {
+  color: var(--bad);
+}
+
+.import-progress__text {
+  flex: 1;
+  min-width: 0;
+}
+
+.import-progress__name {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.import-progress__message {
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.import-progress__item--failed .import-progress__message {
+  color: var(--bad);
+}
+
+.import-progress__item--warning .import-progress__message {
+  color: var(--warn-ink);
+}

@@ -1,0 +1,318 @@
+/*
+ * Design tokens. Every color, radius, shadow and font in the renderer comes
+ * from here: components and screens never hard-code colors.
+ *
+ * Theme switching: lib/theme.tsx sets data-theme="light|dark" on <html>.
+ * Theme-independent tokens (fonts, radii, spacing, motion, layers) live in the
+ * first :root block; color tokens are defined per theme below it.
+ */
+
+:root {
+  /* Type */
+  --font-body: 'DM Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: 'Instrument Serif', Georgia, 'Times New Roman', serif;
+  --font-hand: 'Caveat', 'Segoe Print', cursive;
+  --font-mono: 'JetBrains Mono', ui-monospace, Consolas, monospace;
+
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 15px;
+  --text-md: 16px;
+  --text-lg: 17px;
+  --text-xl: 20px;
+  --text-2xl: 24px;
+
+  --display-sm: 28px;
+  --display-md: 34px;
+  --display-lg: 44px;
+  --display-xl: 50px;
+
+  --hand-sm: 19px;
+  --hand-md: 23px;
+  --hand-lg: 26px;
+
+  /* Spacing (4px grid) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 28px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* Radii: notebook-like, 10-18px for surfaces */
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-pill: 999px;
+  /* Bound edge on the left like a notebook page */
+  --radius-sheet: 6px 18px 18px 6px;
+  --radius-cover: 6px 14px 14px 6px;
+
+  /* Lined paper geometry */
+  --rule-gap: 32px;
+  --margin-offset: 52px;
+
+  /* Control sizes (touch targets are at least 40px tall) */
+  --control-sm: 40px;
+  --control-md: 44px;
+  --control-lg: 50px;
+
+  /* Layout */
+  --page-max: 1240px;
+  --page-max-wide: 1280px;
+  --page-max-narrow: 820px;
+  --page-gutter: 28px;
+  --topbar-height: 68px;
+
+  /* Motion */
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --dur-fast: 120ms;
+  --dur: 180ms;
+  --dur-slow: 280ms;
+
+  /* Layers */
+  --z-topbar: 20;
+  --z-menu: 60;
+  --z-toast: 80;
+  --z-tooltip: 90;
+
+  /* Notebook covers keep their colors in both themes */
+  --nb-blue: #2f5d8a;
+  --nb-orange: #a4521e;
+  --nb-teal: #2e7d73;
+  --nb-purple: #6b4fa0;
+  --nb-green: #3f7a3a;
+  --nb-pink: #a8456b;
+  --nb-slate: #4a5563;
+  --nb-gold: #8a6a12;
+
+  --cover-spine: rgba(0, 0, 0, 0.22);
+  --cover-band: rgba(0, 0, 0, 0.28);
+  --cover-label-bg: #fffdf8;
+  --cover-label-ink: #22201c;
+  --cover-label-muted: #6a655c;
+  --on-cover: #ffffff;
+  --on-cover-track: rgba(255, 255, 255, 0.3);
+  --on-cover-soft: rgba(255, 255, 255, 0.16);
+}
+
+/* ------------------------------------------------------------------ light */
+
+:root,
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --paper: #f7f4ec;
+  --paper-dot: #d8d1c1;
+  --surface: #fffdf8;
+  --surface-2: #f3efe6;
+  --surface-sunken: #efeadf;
+  --topbar-bg: rgba(255, 253, 248, 0.94);
+
+  --ink: #22201c;
+  --ink-2: #4e4a43;
+  --muted: #6a655c;
+  /* Text on --ink backgrounds (primary buttons, chips that are on) */
+  --on-ink: #fffdf8;
+  /* Text on a solid status fill (--good, --bad, --info, --warn backgrounds) */
+  --on-status: #ffffff;
+
+  --line: #e3ded2;
+  --line-2: #eee9de;
+  --line-strong: #cfc7b6;
+  --ruled: #e8e2d5;
+  --margin-line: #e7b3a6;
+
+  --accent-hand: #a4521e;
+  --accent-hand-2: #2f5d8a;
+  --highlight: #fce79a;
+  --highlight-ink: #22201c;
+
+  --link: #2f5d8a;
+  --link-hover: #1f4266;
+  --focus: #2f5d8a;
+
+  /* Status: fg is for icons, bars and borders; ink is text on the bg tint */
+  --good: #2e6b45;
+  --good-bg: #e3f1e7;
+  --good-ink: #1f4a30;
+  --bad: #9e3a24;
+  --bad-bg: #f8e6e1;
+  --bad-ink: #6e2615;
+  --warn: #8a6a12;
+  --warn-bg: #f7efd3;
+  --warn-ink: #6b5210;
+  --info: #2f5d8a;
+  --info-bg: #e6eef6;
+  --info-ink: #1f4266;
+  --neutral: #6a655c;
+  --neutral-bg: #eee9de;
+  --neutral-ink: #4e4a43;
+  /* Between warn and bad, e.g. "getting there" bars and the Hard grade */
+  --caution: #c98a3e;
+
+  /* Mastery states (see ARCHITECTURE.md): fg for bars, ink for text on bg */
+  --mastery-not-started-bg: #eee9de;
+  --mastery-not-started-fg: #6a655c;
+  --mastery-not-started-ink: #6a655c;
+  --mastery-learning-bg: #f7efd3;
+  --mastery-learning-fg: #8a6a12;
+  --mastery-learning-ink: #6b5210;
+  --mastery-weak-bg: #f8e6e1;
+  --mastery-weak-fg: #9e3a24;
+  --mastery-weak-ink: #9e3a24;
+  --mastery-reviewing-bg: #e6eef6;
+  --mastery-reviewing-fg: #2f5d8a;
+  --mastery-reviewing-ink: #2f5d8a;
+  --mastery-mastered-bg: #e3f1e7;
+  --mastery-mastered-fg: #2e6b45;
+  --mastery-mastered-ink: #2e6b45;
+
+  /* Notebook tints (backgrounds) and inks (text on tints) */
+  --nb-blue-tint: #e6eef6;
+  --nb-blue-ink: #1f4266;
+  --nb-orange-tint: #f8ebe1;
+  --nb-orange-ink: #7a3a12;
+  --nb-teal-tint: #e2f1ee;
+  --nb-teal-ink: #1c5850;
+  --nb-purple-tint: #eee9f6;
+  --nb-purple-ink: #4a3475;
+  --nb-green-tint: #e6f0e4;
+  --nb-green-ink: #2b5728;
+  --nb-pink-tint: #f5e6ec;
+  --nb-pink-ink: #7a2c4b;
+  --nb-slate-tint: #e8ebef;
+  --nb-slate-ink: #2e3640;
+  --nb-gold-tint: #f7efd3;
+  --nb-gold-ink: #5e480c;
+
+  /* Pomodoro */
+  --pomo-focus: #a4521e;
+  --pomo-break: #2e7d73;
+
+  /* Code */
+  --code-bg: #22201c;
+  --code-fg: #f3eee3;
+  --code-header-bg: #2e2b26;
+  --code-muted: #b5ae9f;
+  --inline-code-bg: #efe9dc;
+
+  /* Elevation */
+  --backdrop: rgba(34, 32, 28, 0.45);
+  --shadow-sm: 0 1px 3px rgba(34, 32, 28, 0.12);
+  --shadow-md: 0 10px 22px -14px rgba(34, 32, 28, 0.55);
+  --shadow-sheet: 0 14px 30px -22px rgba(34, 32, 28, 0.45);
+  --shadow-pop: 0 18px 40px -16px rgba(34, 32, 28, 0.45), 0 2px 6px rgba(34, 32, 28, 0.08);
+
+  --scrollbar-thumb: #cfc7b6;
+  --scrollbar-thumb-hover: #b6ad99;
+}
+
+/* ------------------------------------------------- dark ("dark paper") */
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --paper: #1c1b19;
+  --paper-dot: #34322d;
+  --surface: #252420;
+  --surface-2: #2e2c27;
+  --surface-sunken: #201f1c;
+  --topbar-bg: rgba(37, 36, 32, 0.94);
+
+  --ink: #f1ece2;
+  --ink-2: #cfc8bb;
+  --muted: #a39c8f;
+  --on-ink: #1c1b19;
+  --on-status: #1c1b19;
+
+  --line: #3a3731;
+  --line-2: #312f2a;
+  --line-strong: #4e4a42;
+  --ruled: #2f2d28;
+  --margin-line: #7a4a40;
+
+  --accent-hand: #e39a68;
+  --accent-hand-2: #9cc2e8;
+  --highlight: rgba(252, 231, 154, 0.25);
+  --highlight-ink: #f1ece2;
+
+  --link: #9cc2e8;
+  --link-hover: #c2daf2;
+  --focus: #9cc2e8;
+
+  --good: #8fd0a5;
+  --good-bg: #1e3326;
+  --good-ink: #b5e3c3;
+  --bad: #f0a493;
+  --bad-bg: #3b221c;
+  --bad-ink: #f7c3b6;
+  --warn: #e5c56b;
+  --warn-bg: #362d15;
+  --warn-ink: #f0d88f;
+  --info: #9cc2e8;
+  --info-bg: #1d2b3a;
+  --info-ink: #c2daf2;
+  --neutral: #bdb6a9;
+  --neutral-bg: #2e2c27;
+  --neutral-ink: #cfc8bb;
+  --caution: #e0a75e;
+
+  --mastery-not-started-bg: #2e2c27;
+  --mastery-not-started-fg: #bdb6a9;
+  --mastery-not-started-ink: #cfc8bb;
+  --mastery-learning-bg: #362d15;
+  --mastery-learning-fg: #e5c56b;
+  --mastery-learning-ink: #f0d88f;
+  --mastery-weak-bg: #3b221c;
+  --mastery-weak-fg: #f0a493;
+  --mastery-weak-ink: #f7c3b6;
+  --mastery-reviewing-bg: #1d2b3a;
+  --mastery-reviewing-fg: #9cc2e8;
+  --mastery-reviewing-ink: #c2daf2;
+  --mastery-mastered-bg: #1e3326;
+  --mastery-mastered-fg: #8fd0a5;
+  --mastery-mastered-ink: #b5e3c3;
+
+  --nb-blue-tint: #1e2b38;
+  --nb-blue-ink: #a9c6e6;
+  --nb-orange-tint: #3a261a;
+  --nb-orange-ink: #edb48c;
+  --nb-teal-tint: #183230;
+  --nb-teal-ink: #93d3c9;
+  --nb-purple-tint: #2b2438;
+  --nb-purple-ink: #c9b8ea;
+  --nb-green-tint: #1f2f1d;
+  --nb-green-ink: #a8d3a2;
+  --nb-pink-tint: #3a2029;
+  --nb-pink-ink: #ebafc6;
+  --nb-slate-tint: #262b31;
+  --nb-slate-ink: #c2cbd6;
+  --nb-gold-tint: #352c14;
+  --nb-gold-ink: #e5c56b;
+
+  --pomo-focus: #e09a6a;
+  --pomo-break: #6fc0b4;
+
+  --code-bg: #151412;
+  --code-fg: #e9e3d6;
+  --code-header-bg: #22201c;
+  --code-muted: #a39c8f;
+  --inline-code-bg: #2e2c27;
+
+  --backdrop: rgba(0, 0, 0, 0.6);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 10px 22px -14px rgba(0, 0, 0, 0.8);
+  --shadow-sheet: 0 14px 30px -22px rgba(0, 0, 0, 0.85);
+  --shadow-pop: 0 18px 40px -16px rgba(0, 0, 0, 0.75), 0 2px 6px rgba(0, 0, 0, 0.3);
+
+  --scrollbar-thumb: #4e4a42;
+  --scrollbar-thumb-hover: #6a655c;
+}

@@ -1,0 +1,28 @@
+/* App shell: top bar above a main area that scrolls on its own. */
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 960px;
+}
+
+.app__main {
+  /* The containing block for absolutely positioned content (.sr-only text,
+     chart tables): without it they are placed against the page, escape this
+     scroll area, and give the whole window a second scrollbar. */
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scroll-padding-top: var(--space-4);
+}
+
+.app__main:focus {
+  outline: none;
+}
+
+/* Don't let the page scroll behind an open dialog. */
+:root:has(dialog[open]) .app__main {
+  overflow: hidden;
+}

@@ -9,12 +9,14 @@ import type { StudyAi } from './ai'
 /** Electron-only capabilities, injected so services stay testable. */
 export interface DesktopAdapter {
   pickFiles(): Promise<string[]>
+  /** Opens a file or folder with its default app. Only paths inside the data folder are allowed. */
   openPath(path: string): Promise<void>
+  /** Only paths inside the data folder are allowed. */
   showItemInFolder(path: string): void
   notify(title: string, body: string): void
   /** Save dialog; resolves the chosen path or null when cancelled. */
   saveDialog(defaultName: string): Promise<string | null>
-  /** OS-keychain-backed encryption (Electron safeStorage). Falls back to plain base64 when unavailable. */
+  /** OS-backed encryption (Electron safeStorage: DPAPI on Windows). Falls back to plain base64 when unavailable. */
   encrypt(plain: string): string
   decrypt(cipher: string): string
   /** Applies the theme to native window chrome (Electron nativeTheme.themeSource). */
@@ -22,7 +24,7 @@ export interface DesktopAdapter {
 }
 
 export interface AppPaths {
-  /** Root data folder (Electron userData/StudyNotebook). */
+  /** Root data folder: Electron's userData (%APPDATA%\Study Notebook on Windows), its "demo" subfolder in demo mode, or STUDY_DATA_DIR. */
   dataDir: string
   /** Where imported files are copied. */
   libraryDir: string
@@ -39,6 +41,6 @@ export interface AppContext {
   emitAiProgress: (event: AiProgressEvent) => void
   /** Current time; overridable in tests. */
   now: () => Date
-  /** True when STUDY_DEMO_AI=1: AI calls return offline demo content. */
+  /** True with STUDY_DEMO_AI=1 or the --demo switch: AI calls return offline demo content. */
   demoAi: boolean
 }

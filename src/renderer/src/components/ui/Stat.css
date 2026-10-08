@@ -1,0 +1,36 @@
+.stat {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.stat--boxed {
+  flex: 1 1 140px;
+  padding: 14px var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.stat__value {
+  font-size: var(--display-sm);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.stat--good .stat__value {
+  color: var(--good);
+}
+
+.stat--bad .stat__value {
+  color: var(--bad);
+}
+
+.stat--warn .stat__value {
+  color: var(--warn);
+}
+
+.stat__label {
+  font-size: var(--text-sm);
+  color: var(--muted);
+}

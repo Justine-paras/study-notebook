@@ -1,0 +1,84 @@
+.progress {
+  --progress-height: 8px;
+  --progress-fill: var(--ink);
+  --progress-track: var(--line-2);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  width: 100%;
+}
+
+.progress--sm {
+  --progress-height: 6px;
+}
+
+.progress--lg {
+  --progress-height: 10px;
+}
+
+.progress__track {
+  flex: 1;
+  min-width: 0;
+  height: var(--progress-height);
+  border-radius: calc(var(--progress-height) / 2);
+  background: var(--progress-track);
+  overflow: hidden;
+}
+
+.progress__fill {
+  width: var(--progress);
+  height: 100%;
+  border-radius: inherit;
+  background: var(--progress-fill);
+  transition: width var(--dur-slow) var(--ease);
+}
+
+.progress__value {
+  flex: none;
+  min-width: 3ch;
+  text-align: right;
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.progress--ink {
+  --progress-fill: var(--ink);
+}
+
+.progress--good {
+  --progress-fill: var(--good);
+}
+
+.progress--bad {
+  --progress-fill: var(--bad);
+}
+
+.progress--warn {
+  --progress-fill: var(--warn);
+}
+
+.progress--info {
+  --progress-fill: var(--info);
+}
+
+.progress--caution {
+  --progress-fill: var(--caution);
+}
+
+.progress--muted {
+  --progress-fill: var(--line-strong);
+}
+
+.progress--accent {
+  --progress-fill: var(--accent-hand);
+}
+
+.progress--on-cover {
+  --progress-fill: var(--on-cover);
+  --progress-track: var(--on-cover-track);
+}
+
+.progress--on-cover .progress__value {
+  color: var(--on-cover);
+}

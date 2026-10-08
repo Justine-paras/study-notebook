@@ -1,0 +1,51 @@
+.lesson-start__text {
+  margin: 0;
+  max-width: 62ch;
+  color: var(--ink-2);
+}
+
+.lesson-start__files {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.lesson-start__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lesson-start__file {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  font-size: 14px;
+}
+
+.lesson-start__file svg {
+  flex: none;
+  color: var(--muted);
+}
+
+.lesson-start__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lesson-start__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}

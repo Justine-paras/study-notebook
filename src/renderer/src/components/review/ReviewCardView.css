@@ -1,0 +1,120 @@
+.review-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.review-card__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.review-card__position {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.review-card__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* Each new card turns in like the next index card in a stack. */
+.review-card__sheet {
+  gap: 18px;
+  transform-origin: 0 50%;
+  animation: review-card-in 320ms var(--ease);
+}
+
+.review-card__front {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.review-card__front:focus {
+  outline: none;
+}
+
+.review-card__front:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 6px;
+  border-radius: var(--radius-xs);
+}
+
+.review-card__question {
+  margin: 0;
+  font-size: var(--display-md);
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.review-card .review-card__question-md {
+  font-size: var(--text-xl);
+  line-height: 1.5;
+}
+
+/* Revealing flips the answer over from its top edge, like turning the card. */
+.review-card__reveal {
+  transform-origin: 50% 0;
+  animation: review-card-flip 440ms var(--ease) both;
+}
+
+.review-card .review-card__back {
+  font-size: var(--text-lg);
+  line-height: 1.55;
+}
+
+.review-card__source {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.review-card__confidence--nudge {
+  animation: review-card-nudge var(--dur-slow) var(--ease);
+}
+
+@keyframes review-card-flip {
+  0% {
+    opacity: 0;
+    transform: perspective(900px) rotateX(-82deg);
+  }
+  45% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+    transform: perspective(900px) rotateX(0);
+  }
+}
+
+@keyframes review-card-in {
+  from {
+    opacity: 0;
+    transform: perspective(1400px) rotateY(-9deg) translateX(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes review-card-nudge {
+  0%,
+  100% {
+    transform: none;
+  }
+  30% {
+    transform: translateX(-4px);
+  }
+  60% {
+    transform: translateX(4px);
+  }
+}

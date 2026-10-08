@@ -1,0 +1,137 @@
+.multi-select {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.multi-select__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+/* A legend inside a flex row needs float to sit in the row in every engine. */
+.multi-select__legend {
+  float: left;
+  padding: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.multi-select__bulk {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.multi-select__link {
+  min-height: 32px;
+  padding: 0 var(--space-2);
+  border: none;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--link);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.multi-select__link:hover:not(:disabled) {
+  color: var(--link-hover);
+  background: var(--surface-2);
+}
+
+.multi-select__link:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+
+.multi-select__hint {
+  clear: both;
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.multi-select__filter {
+  position: relative;
+}
+
+.multi-select__filter-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.multi-select__filter-input {
+  width: 100%;
+  min-height: var(--control-sm);
+  padding: 0 12px 0 36px;
+  border: 1.5px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: var(--text-base);
+}
+
+.multi-select__list {
+  max-height: 260px;
+  margin: 0;
+  padding: var(--space-1) 0;
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.multi-select__item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-height: var(--control-sm);
+  padding: 9px var(--space-3);
+}
+
+.multi-select__item + .multi-select__item {
+  border-top: 1px solid var(--line-2);
+}
+
+.multi-select__check {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin: 1px 0 0;
+  accent-color: var(--ink);
+  cursor: pointer;
+}
+
+.multi-select__label {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+  font-size: var(--text-base);
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.multi-select__option-hint {
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.multi-select__empty {
+  padding: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--muted);
+}

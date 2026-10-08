@@ -1,0 +1,227 @@
+/*
+ * Notebook utilities shared by every screen: lined sheets, handwritten
+ * accents, highlighter marks, display headings and small layout helpers.
+ * The <Sheet> component renders .sheet; screens may also use the classes
+ * directly on their own elements.
+ */
+
+/* Ruled paper background only (no border or margin line). */
+.lined {
+  background-color: var(--surface);
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(var(--rule-gap) - 1px),
+    var(--ruled) calc(var(--rule-gap) - 1px),
+    var(--ruled) var(--rule-gap)
+  );
+}
+
+/* A lined paper sheet with the red margin line, bound on the left. */
+.sheet {
+  position: relative;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-7) var(--space-8) var(--space-8) calc(var(--margin-offset) + var(--space-6));
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sheet);
+  background-color: var(--surface);
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(var(--rule-gap) - 1px),
+    var(--ruled) calc(var(--rule-gap) - 1px),
+    var(--ruled) var(--rule-gap)
+  );
+}
+
+.sheet::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--margin-offset);
+  width: 1.5px;
+  background: var(--margin-line);
+  pointer-events: none;
+}
+
+.sheet--raised {
+  box-shadow: var(--shadow-sheet);
+}
+
+.sheet--roomy {
+  --margin-offset: 56px;
+  padding: 34px 40px 34px calc(var(--margin-offset) + var(--space-6));
+}
+
+.sheet--compact {
+  --margin-offset: 40px;
+  gap: var(--space-3);
+  padding: var(--space-5) var(--space-5) var(--space-5) calc(var(--margin-offset) + var(--space-4));
+}
+
+/* Handwritten accent (Caveat), for small encouraging notes and kickers. */
+.hand {
+  font-family: var(--font-hand);
+  font-weight: 500;
+  font-size: var(--hand-md);
+  line-height: 1.2;
+  color: var(--accent-hand);
+}
+
+.hand--sm {
+  font-size: var(--hand-sm);
+}
+
+.hand--lg {
+  font-size: var(--hand-lg);
+  line-height: 1;
+}
+
+.hand--blue {
+  color: var(--accent-hand-2);
+}
+
+.hand--tilt-left {
+  transform: rotate(-2deg);
+}
+
+.hand--tilt-right {
+  transform: rotate(1.5deg);
+}
+
+/* Highlighter mark for key terms. Works on <mark> or any inline element. */
+.mark,
+mark {
+  background: var(--highlight);
+  color: var(--highlight-ink);
+  padding: 0 3px;
+  border-radius: 3px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+/* Serif display headings. */
+.display {
+  font-family: var(--font-display);
+  font-weight: 400;
+  line-height: 1.1;
+  letter-spacing: -0.005em;
+}
+
+.display--sm {
+  font-size: var(--display-sm);
+}
+
+.display--md {
+  font-size: var(--display-md);
+}
+
+.display--lg {
+  font-size: var(--display-lg);
+  line-height: 1.05;
+}
+
+.display--xl {
+  font-size: var(--display-xl);
+  line-height: 1.05;
+}
+
+/* Small uppercase section label, e.g. "Coming up", "Recall from memory". */
+.caps-label {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.caps-label--xs {
+  font-size: var(--text-xs);
+}
+
+/* Text helpers */
+.muted {
+  color: var(--muted);
+}
+
+.text-2 {
+  color: var(--ink-2);
+}
+
+.text-sm {
+  font-size: var(--text-sm);
+}
+
+.text-xs {
+  font-size: var(--text-xs);
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Layout helpers. Set --gap on the element to change spacing. */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap, var(--space-4));
+  min-width: 0;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--gap, var(--space-3));
+  min-width: 0;
+}
+
+.row--between {
+  justify-content: space-between;
+}
+
+.row--baseline {
+  align-items: baseline;
+}
+
+.row--nowrap {
+  flex-wrap: nowrap;
+}
+
+.spacer {
+  flex: 1 1 0;
+}
+
+/* Main column + side rail that wraps under the main column when narrow. */
+.split {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-6);
+}
+
+.split__main {
+  flex: 999 1 520px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.split__side {
+  flex: 1 1 300px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}

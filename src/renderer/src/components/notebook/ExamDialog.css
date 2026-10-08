@@ -1,0 +1,14 @@
+.exam-dialog__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-3) var(--space-4);
+}
+
+.exam-dialog__name {
+  flex: 1 1 240px;
+}
+
+.exam-dialog__date {
+  flex: 0 1 200px;
+}

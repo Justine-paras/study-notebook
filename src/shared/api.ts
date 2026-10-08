@@ -152,8 +152,12 @@ export interface StudyApi {
   deleteQuiz(id: ID): Promise<void>
 
   // Flashcards and reviews
-  /** Due cards, interleaved across subjects. With cardIds, exactly those cards (in that order). */
-  getReviewQueue(options?: { limit?: number; notebookId?: ID; cardIds?: ID[] }): Promise<ReviewCard[]>
+  /**
+   * Due cards, interleaved across subjects. With cardIds, exactly those cards (in that order).
+   * With topicIds (at least one), those topics' cards whether due or not (up to the limit), for focusing
+   * on weak topics: due cards first (most overdue first), then the rest, most at risk of being forgotten first.
+   */
+  getReviewQueue(options?: { limit?: number; notebookId?: ID; cardIds?: ID[]; topicIds?: ID[] }): Promise<ReviewCard[]>
   reviewCard(input: ReviewInput): Promise<Card>
   listCards(notebookId: ID, topicId?: ID): Promise<Card[]>
   createCard(input: { notebookId: ID; topicId: ID | null; front: string; back: string }): Promise<Card>

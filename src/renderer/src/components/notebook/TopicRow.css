@@ -1,0 +1,109 @@
+/*
+ * One row per topic. Wide lists put everything on one line (prototype);
+ * narrow lists (the main column at a 960px window) move the mastery pill
+ * and bar under the title so the action button never wraps onto its own line.
+ */
+.topic-row {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) auto auto;
+  grid-template-areas: 'unit main mastery actions';
+  align-items: center;
+  gap: var(--space-2) 14px;
+  padding: 14px var(--space-4) 14px var(--space-5);
+  border-bottom: 1px solid var(--line-2);
+}
+
+.topic-row--no-unit {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-areas: 'main mastery actions';
+}
+
+.topic-row:last-child {
+  border-bottom: none;
+}
+
+.topic-row__unit {
+  grid-area: unit;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.topic-row__main {
+  grid-area: main;
+  min-width: 0;
+}
+
+.topic-row__title {
+  font-weight: 600;
+  font-size: var(--text-base);
+  color: var(--ink);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.topic-row__title:hover {
+  color: var(--link-hover);
+  text-decoration: underline;
+}
+
+.topic-row__status {
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.topic-row__mastery {
+  grid-area: mastery;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.topic-row__bar {
+  width: 110px;
+}
+
+.topic-row__actions {
+  grid-area: actions;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-1);
+}
+
+/* Same width for every label so the column lines up (prototype: 92px). */
+.topic-row__action {
+  min-width: 92px;
+}
+
+/* The main column is under ~720px wide below this window width (side rail 300px + gap). */
+@media (max-width: 1100px) {
+  .topic-row {
+    grid-template-columns: 56px minmax(0, 1fr) auto;
+    grid-template-areas:
+      'unit main actions'
+      'unit mastery actions';
+    row-gap: 6px;
+  }
+
+  .topic-row--no-unit {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'main actions'
+      'mastery actions';
+  }
+
+  .topic-row__unit {
+    align-self: start;
+    padding-top: 2px;
+  }
+
+  .topic-row__mastery {
+    gap: 10px;
+  }
+
+  .topic-row__bar {
+    width: 96px;
+  }
+}

@@ -1,0 +1,40 @@
+.calibration {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.calibration__row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.calibration__head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-1) var(--space-2);
+  font-size: var(--text-sm);
+}
+
+.calibration__value {
+  font-weight: 700;
+}
+
+.calibration__value--none {
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.calibration__summary {
+  font-size: var(--text-sm);
+  color: var(--ink-2);
+}
+
+.calibration__summary strong {
+  color: var(--ink);
+}

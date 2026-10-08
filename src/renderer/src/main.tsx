@@ -1,4 +1,20 @@
-// Placeholder entry. OWNER: renderer foundation agent (replaces this file).
+import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import App from './App'
+import { applyInitialTheme } from './lib/theme'
+import './styles/fonts.css'
+import './styles/tokens.css'
+import './styles/base.css'
+import './styles/paper.css'
 
-createRoot(document.getElementById('root')!).render(<p>Study Notebook</p>)
+// Before the first render, so a dark-mode learner never sees a light flash.
+applyInitialTheme()
+
+const root = document.getElementById('root')
+if (!root) throw new Error('Missing #root element in index.html')
+
+createRoot(root).render(
+  <StrictMode>
+    <App />
+  </StrictMode>
+)

@@ -1,0 +1,39 @@
+.note-dialog__fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-3) var(--space-4);
+}
+
+.note-dialog__title {
+  flex: 2 1 280px;
+}
+
+.note-dialog__topic {
+  flex: 1 1 200px;
+}
+
+.note-dialog__tabs {
+  display: flex;
+}
+
+.note-dialog__body {
+  min-height: 300px;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+}
+
+.note-dialog__preview {
+  min-height: 300px;
+}
+
+/* Delete and the shortcut hint sit on the left, Cancel and Save on the right. */
+.note-dialog__hint {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-right: auto;
+  font-size: var(--text-xs);
+  color: var(--muted);
+}

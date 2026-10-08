@@ -1,0 +1,152 @@
+/*
+ * A compact row (prototype): the type badge, the name across the full width,
+ * then the kind picker and size with the actions at the right end. The name
+ * gets the whole width of the 300px side rail; progress and errors appear
+ * under the row only while they matter.
+ */
+.source-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: 8px 0;
+  border-top: 1px solid var(--line-2);
+  transition: opacity var(--dur) var(--ease);
+}
+
+.source-row--removing {
+  opacity: 0.5;
+}
+
+.source-row__main {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  grid-template-areas:
+    'ext name name'
+    'ext meta actions';
+  align-items: center;
+  column-gap: 10px;
+  min-width: 0;
+}
+
+/* File type badge (prototype: 40x32 tinted tile). */
+.source-row__ext {
+  grid-area: ext;
+  align-self: start;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 32px;
+  border-radius: var(--radius-xs);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  background: var(--neutral-bg);
+  color: var(--neutral-ink);
+}
+
+.source-row__ext--pdf {
+  background: var(--bad-bg);
+  color: var(--bad-ink);
+}
+
+.source-row__ext--pptx {
+  background: var(--nb-orange-tint);
+  color: var(--nb-orange-ink);
+}
+
+.source-row__ext--docx {
+  background: var(--info-bg);
+  color: var(--info-ink);
+}
+
+/* Up to two lines, so most names show in full; the title attribute has the rest. */
+.source-row__name {
+  grid-area: name;
+  align-self: end;
+  min-height: 32px;
+  padding-top: 7px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.source-row__meta {
+  grid-area: meta;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+  min-width: 0;
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+/* The kind picker reads as part of the meta line: a small tinted chip with a chevron. */
+.source-row__kind-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+}
+
+.source-row__kind {
+  appearance: none;
+  height: 26px;
+  padding: 0 22px 0 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs);
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease);
+}
+
+.source-row__kind:hover {
+  border-color: var(--line-strong);
+}
+
+.source-row__kind:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+.source-row__kind option {
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.source-row__kind-icon {
+  position: absolute;
+  right: 6px;
+  pointer-events: none;
+  color: var(--muted);
+}
+
+.source-row__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.source-row__status--error {
+  color: var(--bad);
+  white-space: normal;
+}
+
+.source-row__actions {
+  grid-area: actions;
+  display: flex;
+  align-items: center;
+}

@@ -1,0 +1,15 @@
+.topic-page__top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.topic-page__main {
+  gap: var(--space-4);
+}
+
+.topic-page__side {
+  flex-basis: 280px;
+}

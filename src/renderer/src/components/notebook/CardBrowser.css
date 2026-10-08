@@ -1,0 +1,95 @@
+.card-browser__filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-3) var(--space-4);
+}
+
+.card-browser__search {
+  flex: 2 1 260px;
+}
+
+.card-browser__topic {
+  flex: 1 1 200px;
+}
+
+.card-browser__status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+}
+
+.card-browser__count {
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+
+.card-browser__list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+}
+
+.card-browser__item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+}
+
+.card-browser__item + .card-browser__item {
+  border-top: 1px solid var(--line-2);
+}
+
+.card-browser__item--paused .card-browser__text {
+  opacity: 0.7;
+}
+
+.card-browser__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Two lines of each side is enough to recognise a card; the editor shows the rest. */
+.card-browser__front,
+.card-browser__back {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.card-browser__front {
+  font-weight: 600;
+}
+
+.card-browser__back {
+  font-size: var(--text-sm);
+  color: var(--ink-2);
+}
+
+.card-browser__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  margin-top: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.card-browser__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}

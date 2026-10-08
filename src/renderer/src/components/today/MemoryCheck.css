@@ -1,0 +1,9 @@
+.memory-check {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3) 18px;
+}
+
+.memory-check > * {
+  flex: 1 1 110px;
+}
